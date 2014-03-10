@@ -17,7 +17,6 @@ public class StorageTools {
             = Logger.getLogger(StorageTools.class.getName());
     private static final String DEBIAN_LIVE_SYSTEM_PATH
             = "/lib/live/mount/medium";
-    private static final String SYSTEM_PARTITION_LABEL = "system";
     private static final long SYSTEM_SIZE;
     private static final long SYSTEM_SIZE_ENLARGED;
     // SIZE_FACTOR is >1 so that we leave some space for updates, etc...
@@ -63,8 +62,7 @@ public class StorageTools {
             throws DBusException, IOException {
         if (systemStorageDevice == null) {
             Partition systemPartition = Partition.getPartitionFromMountPoint(
-                    DEBIAN_LIVE_SYSTEM_PATH, SYSTEM_PARTITION_LABEL,
-                    SYSTEM_SIZE);
+                    DEBIAN_LIVE_SYSTEM_PATH, SYSTEM_SIZE);
             LOGGER.log(Level.INFO, "system partition: {0}", systemPartition);
 
             if (systemPartition == null) {
@@ -72,8 +70,7 @@ public class StorageTools {
                 // e.g. an isohybrid image on a usb flash drive
                 systemStorageDevice
                         = StorageDevice.getStorageDeviceFromMountPoint(
-                                DEBIAN_LIVE_SYSTEM_PATH, SYSTEM_PARTITION_LABEL,
-                                SYSTEM_SIZE);
+                                DEBIAN_LIVE_SYSTEM_PATH, SYSTEM_SIZE);
             } else {
                 systemStorageDevice = systemPartition.getStorageDevice();
             }

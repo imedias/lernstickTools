@@ -51,7 +51,6 @@ public class StorageDevice implements Comparable<StorageDevice> {
     private final String revision;
     private final String serial;
     private final long size;
-    private final String systemPartitionLabel;
     private final long systemSize;
     private final boolean systemInternal;
     private final String connectionInterface;
@@ -73,10 +72,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
      * @param systemSize the size of the currently running Debian Live system
      * @throws DBusException if getting the device properties via d-bus fails
      */
-    public StorageDevice(String device, String systemPartitionLabel,
-            long systemSize) throws DBusException {
+    public StorageDevice(String device, long systemSize) throws DBusException {
         this.device = device;
-        this.systemPartitionLabel = systemPartitionLabel;
         this.systemSize = systemSize;
         vendor = DbusTools.getStringProperty(device, "DriveVendor");
         model = DbusTools.getStringProperty(device, "DriveModel");
@@ -118,15 +115,14 @@ public class StorageDevice implements Comparable<StorageDevice> {
      * @throws IOException if reading "/proc/mounts" fails
      */
     public static StorageDevice getStorageDeviceFromMountPoint(
-            String mountPoint, String systemPartitionLabel, long systemSize)
+            String mountPoint, long systemSize)
             throws DBusException, IOException {
         LOGGER.log(Level.FINE, "mountPoint: \"{0}\"", mountPoint);
         List<String> mounts = FileTools.readFile(new File("/proc/mounts"));
         for (String mount : mounts) {
             String[] tokens = mount.split(" ");
             if (tokens[0].startsWith("/dev/") && tokens[1].equals(mountPoint)) {
-                return new StorageDevice(tokens[0].substring(5),
-                        systemPartitionLabel, systemSize);
+                return new StorageDevice(tokens[0].substring(5), systemSize);
             }
         }
         return null;
@@ -413,7 +409,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
         try {
             String numberString = matcher.group(1);
             Partition partition = Partition.getPartitionFromDevice(
-                    device, numberString, systemPartitionLabel, systemSize);
+                    device, numberString, systemSize);
             if (partition.isPersistencePartition()) {
                 dataPartition = partition;
             } else if (partition.isExchangePartition()) {
