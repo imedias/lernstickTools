@@ -68,7 +68,6 @@ public class StorageDevice implements Comparable<StorageDevice> {
      * creates a new StorageDevice
      *
      * @param device the unix device name, e.g. "sda"
-     * @param systemPartitionLabel the (expected) system partition label
      * @param systemSize the size of the currently running Debian Live system
      * @throws DBusException if getting the device properties via d-bus fails
      */
@@ -108,7 +107,6 @@ public class StorageDevice implements Comparable<StorageDevice> {
      * creates a new StorageDevice
      *
      * @param mountPoint the mount point of the storage device
-     * @param systemPartitionLabel the (expected) system partition label
      * @param systemSize the on-disk-size of the operating system
      * @return a new StorageDevice
      * @throws DBusException if getting the device properties via d-bus fails
@@ -118,7 +116,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
             String mountPoint, long systemSize)
             throws DBusException, IOException {
         LOGGER.log(Level.FINE, "mountPoint: \"{0}\"", mountPoint);
-        List<String> mounts = LernstickFileTools.readFile(new File("/proc/mounts"));
+        List<String> mounts
+                = LernstickFileTools.readFile(new File("/proc/mounts"));
         for (String mount : mounts) {
             String[] tokens = mount.split(" ");
             if (tokens[0].startsWith("/dev/") && tokens[1].equals(mountPoint)) {

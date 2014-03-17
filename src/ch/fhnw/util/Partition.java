@@ -61,7 +61,7 @@ public class Partition {
      * @throws DBusException if getting the partition properties via dbus fails
      */
     public static Partition getPartitionFromDeviceAndNumber(
-            String deviceAndNumber,long systemSize) throws DBusException {
+            String deviceAndNumber, long systemSize) throws DBusException {
         LOGGER.log(Level.FINE, "deviceAndNumber: \"{0}\"", deviceAndNumber);
         Matcher matcher = deviceAndNumberPattern.matcher(deviceAndNumber);
         if (matcher.matches()) {
@@ -81,15 +81,16 @@ public class Partition {
      * @throws IOException if reading "/proc/mounts" fails
      */
     public static Partition getPartitionFromMountPoint(
-            String mountPoint,long systemSize)
+            String mountPoint, long systemSize)
             throws DBusException, IOException {
         LOGGER.log(Level.FINE, "mountPoint: \"{0}\"", mountPoint);
-        List<String> mounts = LernstickFileTools.readFile(new File("/proc/mounts"));
+        List<String> mounts
+                = LernstickFileTools.readFile(new File("/proc/mounts"));
         for (String mount : mounts) {
             String[] tokens = mount.split(" ");
             if (tokens[0].startsWith("/dev/") && tokens[1].equals(mountPoint)) {
                 return getPartitionFromDeviceAndNumber(
-                        tokens[0].substring(5),systemSize);
+                        tokens[0].substring(5), systemSize);
             }
         }
         return null;
