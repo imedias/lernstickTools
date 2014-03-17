@@ -84,7 +84,7 @@ public class Partition {
             String mountPoint,long systemSize)
             throws DBusException, IOException {
         LOGGER.log(Level.FINE, "mountPoint: \"{0}\"", mountPoint);
-        List<String> mounts = FileTools.readFile(new File("/proc/mounts"));
+        List<String> mounts = LernstickFileTools.readFile(new File("/proc/mounts"));
         for (String mount : mounts) {
             String[] tokens = mount.split(" ");
             if (tokens[0].startsWith("/dev/") && tokens[1].equals(mountPoint)) {
