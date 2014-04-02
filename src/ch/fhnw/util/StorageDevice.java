@@ -411,10 +411,14 @@ public class StorageDevice implements Comparable<StorageDevice> {
                     device, numberString, systemSize);
             if (partition.isPersistencePartition()) {
                 dataPartition = partition;
+            } else if (partition.isBootPartition()) {
+                // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                // ! put the boot partition check before the exchange    !
+                // ! partition check because it is the more specific one !
+                // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                bootPartition = partition;
             } else if (partition.isExchangePartition()) {
                 exchangePartition = partition;
-            } else if (partition.isBootPartition()) {
-                bootPartition = partition;
             } else if (partition.isSystemPartition()) {
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 // ! put the system partition check at the end of the list   !
