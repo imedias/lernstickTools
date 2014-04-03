@@ -253,7 +253,11 @@ public class Partition {
      * @throws DBusException if a dbus exception occurs
      */
     public String getMountPath() throws DBusException {
-        return getMountPaths().get(0);
+        List<String> mountPaths = getMountPaths();
+        if (mountPaths.isEmpty()) {
+            return null;
+        }
+        return mountPaths.get(0);
     }
 
     /**
@@ -310,7 +314,8 @@ public class Partition {
                         String userSizeString = matcher.group(1);
                         userSize = Long.parseLong(userSizeString);
                     }
-                    LOGGER.log(Level.INFO, "userSize = {0}", userSize);
+                    LOGGER.log(Level.INFO, "{0}: userSize = {1}",
+                            new Object[]{toString(), userSize});
 
                     processExecutor.executeProcess(true, true,
                             "du", "-sb", mountPath + "/etc/cups");
@@ -319,14 +324,16 @@ public class Partition {
                         String userSizeString = matcher.group(1);
                         cupsSize = Long.parseLong(userSizeString);
                     }
-                    LOGGER.log(Level.INFO, "cupsSize = {0}", cupsSize);
+                    LOGGER.log(Level.INFO, "{0}: cupsSize = {1}",
+                            new Object[]{toString(), cupsSize});
                     usedSpace = userSize + cupsSize;
 
                 } else {
                     usedSpace = size - (new File(mountPath)).getUsableSpace();
                 }
 
-                LOGGER.log(Level.INFO, "usedSpace = {0}", usedSpace);
+                LOGGER.log(Level.INFO, "{0}: usedSpace = {1}",
+                        new Object[]{toString(), usedSpace});
 
                 // cleanup
                 if (!mountInfo.alreadyMounted()) {
@@ -515,7 +522,27 @@ public class Partition {
      * <code>false</code> otherwise
      */
     public boolean isExchangePartition() {
-        return (number == 1);
+        // First check the partition number:
+        // The exchange partition is either the first partition (legacy version
+        // where the boot partition was not the first partition) or the second
+        // partition (current version where the boot partition MUST be the first
+        // partition).
+        if ((number != 1) && (number != 2)) {
+            return false;
+        }
+
+        // Check partition and file system types:
+        // The exchange partition can either be of type 0x07 (when using exFAT
+        // or NTFS) or of type 0x0c (when using FAT32)
+        if (type.equals("0x07")) {
+            // exFAT or NTFS?
+            return (idType.equals("exfat") || idType.equals("ntfs"));
+        } else if (type.equals("0x0c")) {
+            // FAT32?
+            return (idType.equals("vfat"));
+        }
+
+        return false;
     }
 
     /**

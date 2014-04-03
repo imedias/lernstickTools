@@ -287,6 +287,13 @@ public class StorageDevice implements Comparable<StorageDevice> {
         // lazy initialization of canBeUpgraded
         if (canBeUpgraded == null) {
             canBeUpgraded = false;
+
+            // check if we have a current partitioning schema
+            if ((bootPartition == null) || (bootPartition.getNumber() != 1)) {
+                noUpgradeReason = STRINGS.getString("Deprecated_Partitioning");
+                return false;
+            }
+
             long remaining = -1;
             Partition previousPartition = null;
             for (Partition partition : getPartitions()) {
@@ -319,9 +326,18 @@ public class StorageDevice implements Comparable<StorageDevice> {
                             && (!previousPartition.isExtended())) {
                         // right now we can only resize ext partitions
                         if (previousPartition.hasExtendedFilesystem()) {
+                            long previousUsedSpace;
+                            if (previousPartition.isPersistencePartition()) {
+                                previousUsedSpace
+                                        = previousPartition.getUsedSpace(true);
+                            } else {
+                                previousUsedSpace
+                                        = previousPartition.getUsedSpace(false);
+                            }
+
                             long usableSpace
                                     = previousPartition.getSize()
-                                    - previousPartition.getUsedSpace(true);
+                                    - previousUsedSpace;
                             if (usableSpace > Math.abs(remaining)) {
                                 canBeUpgraded = true;
                                 needsRepartitioning = true;
