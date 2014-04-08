@@ -28,6 +28,9 @@ import javax.swing.table.TableColumnModel;
  */
 public class PreferredSizesTableModel extends DefaultTableModel {
 
+    /**
+     * the table where this model is used in
+     */
     protected final JTable table;
     private final Dimension maxDimension;
     // caches the table cell sizes for faster resizing operations
