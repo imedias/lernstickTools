@@ -67,28 +67,30 @@ public class PreferredSizesTableModel extends DefaultTableModel {
     }
 
     /**
+     * sets the withs of all columns to their preferred with
+     */
+    public void updateTableColumnWidths() {
+        TableColumnModel columnModel = table.getColumnModel();
+
+        for (int column = 0, columns = getColumnCount(); column < columns; column++) {
+            TableColumn tableColumn = columnModel.getColumn(column);
+            tableColumn.setWidth(tableColumn.getPreferredWidth());
+        }
+    }
+
+    /**
      * catches reloading of table data
      */
     @Override
     public void fireTableDataChanged() {
-
         super.fireTableDataChanged();
-
-        // re-initialize our dimension cache matrix
-        int columns = getColumnCount();
-        int rows = getRowCount();
-        dimensionCache = new Dimension[columns][rows + 1];
-
-        updateHeaderDimensions();
-        updateCellDimensions(0, rows - 1);
-        resetTableColumnWidths();
-        resetViewPortSize();
+        initSizes();
     }
 
     private void updateHeaderDimensions() {
         TableColumnModel columnModel = table.getColumnModel();
-        TableCellRenderer headerRenderer =
-                table.getTableHeader().getDefaultRenderer();
+        TableCellRenderer headerRenderer
+                = table.getTableHeader().getDefaultRenderer();
 
         for (int column = 0, columns = getColumnCount(); column < columns; column++) {
 
@@ -97,8 +99,11 @@ public class PreferredSizesTableModel extends DefaultTableModel {
             Component header = headerRenderer.getTableCellRendererComponent(
                     table, headerValue, false, false, 0, column);
 
+            // add some horizontal space for the sorting handle
+            Dimension preferredSize = header.getPreferredSize();
+            preferredSize.width += 15;
             // the header gets stored at the row index "0"
-            dimensionCache[column][0] = header.getPreferredSize();
+            dimensionCache[column][0] = preferredSize;
         }
     }
 
@@ -107,8 +112,8 @@ public class PreferredSizesTableModel extends DefaultTableModel {
         for (int column = 0, columns = getColumnCount(); column < columns; column++) {
 
             // get working renderer
-            TableCellRenderer renderer =
-                    columnModel.getColumn(column).getCellRenderer();
+            TableCellRenderer renderer
+                    = columnModel.getColumn(column).getCellRenderer();
             if (renderer == null) {
                 renderer = table.getDefaultRenderer(getColumnClass(column));
             }
@@ -135,8 +140,8 @@ public class PreferredSizesTableModel extends DefaultTableModel {
             for (int row = firstRow; row <= lastRow; row++) {
                 Dimension cellDimension = dimensionCache[column][row + 1];
                 int arrayIndex = row - firstRow;
-                maxHeights[arrayIndex] =
-                        Math.max(maxHeights[arrayIndex], cellDimension.height);
+                maxHeights[arrayIndex]
+                        = Math.max(maxHeights[arrayIndex], cellDimension.height);
             }
         }
 
@@ -156,8 +161,8 @@ public class PreferredSizesTableModel extends DefaultTableModel {
             int preferredColumnWidth = 0;
             for (int row = 0; row < rows + 1; row++) {
                 Dimension cellSize = dimensionCache[column][row];
-                preferredColumnWidth =
-                        Math.max(preferredColumnWidth, cellSize.width);
+                preferredColumnWidth
+                        = Math.max(preferredColumnWidth, cellSize.width);
             }
             tableColumn.setPreferredWidth(preferredColumnWidth + 5);
         }
@@ -171,19 +176,19 @@ public class PreferredSizesTableModel extends DefaultTableModel {
         TableColumnModel columnModel = table.getColumnModel();
 
         for (int column = 0; column < columns; column++) {
-            perfectTableWidth +=
-                    columnModel.getColumn(column).getPreferredWidth();
+            perfectTableWidth
+                    += columnModel.getColumn(column).getPreferredWidth();
         }
         for (int row = 0, rows = getRowCount(); row < rows; row++) {
             perfectTableHeight += table.getRowHeight(row);
         }
 
         // add some pixels for every column we have
-        perfectTableWidth =
-                Math.min(perfectTableWidth + columns * 10, maxDimension.width);
+        perfectTableWidth
+                = Math.min(perfectTableWidth + columns * 10, maxDimension.width);
         // add some height pixels too
-        perfectTableHeight =
-                Math.min(perfectTableHeight + 5, maxDimension.height);
+        perfectTableHeight
+                = Math.min(perfectTableHeight + 5, maxDimension.height);
 
         table.setPreferredScrollableViewportSize(
                 new Dimension(perfectTableWidth, perfectTableHeight));
