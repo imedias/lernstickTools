@@ -288,6 +288,10 @@ public class StorageDevice implements Comparable<StorageDevice> {
         if (canBeUpgraded == null) {
             canBeUpgraded = false;
 
+            // !!! must be called before the next chech, otherwise bootPartition
+            // !!! could still be null even when there is one
+            getPartitions();
+
             // check if we have a current partitioning schema
             if ((bootPartition == null) || (bootPartition.getNumber() != 1)) {
                 noUpgradeReason = STRINGS.getString("Deprecated_Partitioning");
@@ -296,7 +300,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
 
             long remaining = -1;
             Partition previousPartition = null;
-            for (Partition partition : getPartitions()) {
+            for (Partition partition : partitions) {
                 if (partition.isSystemPartition()) {
                     long partitionSize = partition.getSize();
                     // wild guess: give file system maximum 1% overhead...
