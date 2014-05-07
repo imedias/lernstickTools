@@ -52,6 +52,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
     private final String serial;
     private final long size;
     private final long systemSize;
+    private final boolean removable;
     private final boolean systemInternal;
     private final String connectionInterface;
     private final Type type;
@@ -79,6 +80,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
         revision = DbusTools.getStringProperty(device, "DriveRevision");
         serial = DbusTools.getStringProperty(device, "DriveSerial");
         size = DbusTools.getLongProperty(device, "DeviceSize");
+        removable = DbusTools.getBooleanProperty(device, "DeviceIsRemovable");
         systemInternal = DbusTools.getBooleanProperty(
                 device, "DeviceIsSystemInternal");
         connectionInterface = DbusTools.getStringProperty(
@@ -217,6 +219,17 @@ public class StorageDevice implements Comparable<StorageDevice> {
      */
     public long getSize() {
         return size;
+    }
+
+    /**
+     * returns <code>true</code>, if this device is removable,
+     * <code>false</code> otherwise
+     *
+     * @return <code>true</code>, if this device is removable,
+     * <code>false</code> otherwise
+     */
+    public boolean isRemovable() {
+        return removable;
     }
 
     /**
