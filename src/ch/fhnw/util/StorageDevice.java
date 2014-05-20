@@ -306,9 +306,32 @@ public class StorageDevice implements Comparable<StorageDevice> {
             getPartitions();
 
             // check if we have a current partitioning schema
-            if ((bootPartition == null) || (bootPartition.getNumber() != 1)) {
+            if (bootPartition == null) {
                 noUpgradeReason = STRINGS.getString("Deprecated_Partitioning");
                 return false;
+            } else {
+                switch (bootPartition.getNumber()) {
+                    case 1:
+                        // fine, current partitioning schema
+                        break;
+                    case 2:
+                        if ((exchangePartition != null)
+                                && (exchangePartition.getNumber() == 1)) {
+                            // fine, we have the partitioning schema for
+                            // older, *removable* USB flash drives:
+                            //  1. partition: exchange
+                            //  2. partition: boot
+                            break;
+                        } else {
+                            noUpgradeReason = STRINGS.getString(
+                                    "Deprecated_Partitioning");
+                            return false;
+                        }
+                    default:
+                        noUpgradeReason = STRINGS.getString(
+                                "Deprecated_Partitioning");
+                        return false;
+                }
             }
 
             long remaining = -1;
