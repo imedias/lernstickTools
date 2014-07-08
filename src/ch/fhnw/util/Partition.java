@@ -467,29 +467,33 @@ public class Partition {
             LOGGER.log(Level.FINEST, "checking partition {0}", deviceAndNumber);
             LOGGER.log(Level.FINEST, "partition label: \"{0}\"", idLabel);
 
-            // mount partition (if not already mounted)
-            MountInfo mountInfo = mount();
-            String mountPath = mountInfo.getMountPath();
+            try {
+                // mount partition (if not already mounted)
+                MountInfo mountInfo = mount();
+                String mountPath = mountInfo.getMountPath();
 
-            // check partition file structure
-            LOGGER.log(Level.FINEST,
-                    "checking file structure on partition {0}",
-                    deviceAndNumber);
-            File liveDir = new File(mountPath, "live");
-            if (liveDir.exists()) {
-                FilenameFilter squashFsFilter = new FilenameFilter() {
-                    @Override
-                    public boolean accept(File dir, String name) {
-                        return name.endsWith(".squashfs");
-                    }
-                };
-                String[] squashFileSystems = liveDir.list(squashFsFilter);
-                isSystemPartition = (squashFileSystems.length > 0);
-            }
+                // check partition file structure
+                LOGGER.log(Level.FINEST,
+                        "checking file structure on partition {0}",
+                        deviceAndNumber);
+                File liveDir = new File(mountPath, "live");
+                if (liveDir.exists()) {
+                    FilenameFilter squashFsFilter = new FilenameFilter() {
+                        @Override
+                        public boolean accept(File dir, String name) {
+                            return name.endsWith(".squashfs");
+                        }
+                    };
+                    String[] squashFileSystems = liveDir.list(squashFsFilter);
+                    isSystemPartition = (squashFileSystems.length > 0);
+                }
 
-            // cleanup
-            if (!mountInfo.alreadyMounted()) {
-                umount();
+                // cleanup
+                if (!mountInfo.alreadyMounted()) {
+                    umount();
+                }
+            } catch (DBusExecutionException ex) {
+                throw new DBusException(ex.getMessage());
             }
         }
         return isSystemPartition;
