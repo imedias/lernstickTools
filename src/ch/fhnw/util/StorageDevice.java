@@ -461,9 +461,10 @@ public class StorageDevice implements Comparable<StorageDevice> {
     }
 
     private Partition parsePartition(Matcher matcher) {
+        Partition partition = null;
         try {
             String numberString = matcher.group(1);
-            Partition partition = Partition.getPartitionFromDevice(
+            partition = Partition.getPartitionFromDevice(
                     device, numberString, systemSize);
             if (partition.isPersistencePartition()) {
                 dataPartition = partition;
@@ -482,12 +483,11 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 systemPartition = partition;
             }
-            return partition;
         } catch (NumberFormatException numberFormatException) {
             LOGGER.log(Level.WARNING, "", numberFormatException);
         } catch (DBusException ex) {
             LOGGER.log(Level.WARNING, "", ex);
         }
-        return null;
+        return partition;
     }
 }
