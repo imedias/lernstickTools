@@ -41,6 +41,38 @@ public class StorageDevice implements Comparable<StorageDevice> {
          */
         SDMemoryCard
     }
+
+    /**
+     * all known upgrade variants
+     */
+    public enum UpgradeVariant {
+
+        /**
+         * The persistency partition is cleaned (excluding the users home
+         * directory and the cups configuration) and the system partition is
+         * replaced.
+         */
+        REGULAR,
+        /**
+         * The system partition must be enlarged before upgrading.
+         */
+        REPARTITION,
+        /**
+         * The personal data and configuration is backed up before executing a
+         * completely new installation on the storage device. After installation
+         * the backed up data is restored.
+         */
+        BACKUP,
+        /**
+         * Upgrading is done by a clean default installation.
+         */
+        INSTALLATION,
+        /**
+         * The storage device can not be upgraded.
+         */
+        IMPOSSIBLE
+    }
+
     private static final Logger LOGGER
             = Logger.getLogger(StorageDevice.class.getName());
     private static final ResourceBundle STRINGS
@@ -57,8 +89,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
     private final String connectionInterface;
     private final Type type;
     private List<Partition> partitions;
-    private Boolean canBeUpgraded;
-    private boolean needsRepartitioning;
+    private UpgradeVariant upgradeVariant;
     private String noUpgradeReason;
     private Partition exchangePartition;
     private Partition dataPartition;
@@ -289,26 +320,33 @@ public class StorageDevice implements Comparable<StorageDevice> {
     }
 
     /**
-     * returns <code>true</code>, if this storage device can be upgraded,
-     * <code>false</code> otherwise
+     * returns if and how the storage device can be upgraded
      *
-     * @return <code>true</code>, if this storage device can be upgraded,
-     * <code>false</code> otherwise
+     * @return if and how the storage device can be upgraded
      * @throws DBusException if a dbus exception occurs
      */
-    public synchronized boolean canBeUpgraded() throws DBusException {
-        // lazy initialization of canBeUpgraded
-        if (canBeUpgraded == null) {
-            canBeUpgraded = false;
+    public synchronized UpgradeVariant getUpgradeVariant()
+            throws DBusException {
+        // lazy initialization of upgradeVariant
+        if (upgradeVariant == null) {
 
-            // !!! must be called before the next chech, otherwise bootPartition
+            // !!! must be called before the next check, otherwise bootPartition
             // !!! could still be null even when there is one
             getPartitions();
 
-            // check if we have a current partitioning schema
+            if (systemPartition == null) {
+                noUpgradeReason
+                        = STRINGS.getString("No_System_Partition_Found");
+                upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+                return upgradeVariant;
+            }
+
+            // check partitioning schema
             if (bootPartition == null) {
-                noUpgradeReason = STRINGS.getString("Deprecated_Partitioning");
-                return false;
+                // old partitioning schema without any boot partition
+                setDestructiveUpgradeVariant();
+                return upgradeVariant;
+
             } else {
                 switch (bootPartition.getNumber()) {
                     case 1:
@@ -323,17 +361,20 @@ public class StorageDevice implements Comparable<StorageDevice> {
                             //  2. partition: boot
                             break;
                         } else {
-                            noUpgradeReason = STRINGS.getString(
-                                    "Deprecated_Partitioning");
-                            return false;
+                            // unknown partitioning schema
+                            setDestructiveUpgradeVariant();
+                            return upgradeVariant;
                         }
                     default:
-                        noUpgradeReason = STRINGS.getString(
-                                "Deprecated_Partitioning");
-                        return false;
+                        // unknown partitioning schema
+                        setDestructiveUpgradeVariant();
+                        return upgradeVariant;
                 }
             }
 
+            // Even though we already know the system partition we need to loop
+            // here because we also need to know the previous partition to
+            // decide if we can repartition the device.
             long remaining = -1;
             Partition previousPartition = null;
             for (Partition partition : partitions) {
@@ -353,15 +394,18 @@ public class StorageDevice implements Comparable<StorageDevice> {
                     remaining = partitionSize - saveSystemSize;
                     LOGGER.log(Level.FINE, "remaining = {0}", remaining);
                     if (remaining >= 0) {
-                        canBeUpgraded = true;
-                        break; // for
+                        // the new system fits into the current system partition
+                        upgradeVariant = UpgradeVariant.REGULAR;
+                        return upgradeVariant;
                     }
 
+                    // The new system is larger than the current system
+                    // partition. Check if repartitioning is possible.
+                    //
                     // TODO: more sophisticated checks
                     //  - device with partition gaps
                     //  - expand in both directions
                     //  - ...
-                    // check if repartitioning is possible
                     if ((previousPartition != null)
                             && (!previousPartition.isExtended())) {
                         // right now we can only resize ext partitions
@@ -379,36 +423,26 @@ public class StorageDevice implements Comparable<StorageDevice> {
                                     = previousPartition.getSize()
                                     - previousUsedSpace;
                             if (usableSpace > Math.abs(remaining)) {
-                                canBeUpgraded = true;
-                                needsRepartitioning = true;
-                                break; // for
+                                upgradeVariant = UpgradeVariant.REPARTITION;
+                                return upgradeVariant;
                             }
                         }
                     }
+
+                    // we already found the system partition
+                    // no need to search further
+                    break;
                 }
                 previousPartition = partition;
             }
             if (remaining < 0) {
-                if (systemPartition == null) {
-                    noUpgradeReason
-                            = STRINGS.getString("No_System_Partition_Found");
-                } else {
-                    noUpgradeReason
-                            = STRINGS.getString("System_Partition_Too_Small");
-                }
+                noUpgradeReason
+                        = STRINGS.getString("System_Partition_Too_Small");
+                upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+                return upgradeVariant;
             }
         }
-        return canBeUpgraded;
-    }
-
-    /**
-     * checks if the storage device must be repartitioned when upgraded
-     *
-     * @return <code>true</code>, if the system must be repartitioned when
-     * upgraded, <code>false</code> otherwise
-     */
-    public boolean needsRepartitioning() {
-        return needsRepartitioning;
+        return upgradeVariant;
     }
 
     /**
@@ -489,5 +523,13 @@ public class StorageDevice implements Comparable<StorageDevice> {
             LOGGER.log(Level.WARNING, "", ex);
         }
         return partition;
+    }
+
+    private void setDestructiveUpgradeVariant() {
+        if ((dataPartition == null) && (exchangePartition == null)) {
+            upgradeVariant = UpgradeVariant.INSTALLATION;
+        } else {
+            upgradeVariant = UpgradeVariant.BACKUP;
+        }
     }
 }
