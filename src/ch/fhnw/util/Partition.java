@@ -537,11 +537,12 @@ public class Partition {
 
         // Check partition and file system types:
         // The exchange partition can either be of type 0x07 (when using exFAT
-        // or NTFS) or of type 0x0c (when using FAT32)
+        // or NTFS) or of type 0x0c (when using FAT32).
+        // Older Lernstick versions even used 0x0e for the exchange partition.
         if (type.equals("0x07")) {
             // exFAT or NTFS?
             return (idType.equals("exfat") || idType.equals("ntfs"));
-        } else if (type.equals("0x0c")) {
+        } else if (type.equals("0x0c") || type.equals("0x0e")) {
             // FAT32?
             return (idType.equals("vfat"));
         }
