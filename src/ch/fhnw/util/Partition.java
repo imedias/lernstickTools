@@ -362,23 +362,27 @@ public class Partition {
      * @throws DBusException if a dbus exception occurs
      */
     public MountInfo mount(String... options) throws DBusException {
-        String mountPath;
-        boolean wasMounted = false;
-        List<String> mountPaths = getMountPaths();
-        if (mountPaths.isEmpty()) {
-            Device udisksDevice = DbusTools.getDevice(deviceAndNumber);
-            mountPath = udisksDevice.FilesystemMount(
-                    "auto", Arrays.asList(options));
-        } else {
-            mountPath = mountPaths.get(0);
-            wasMounted = true;
-            if (LOGGER.isLoggable(Level.FINEST)) {
-                LOGGER.log(Level.FINEST, "{0} already mounted at {1}",
-                        new Object[]{this, mountPath}
-                );
+        try {
+            String mountPath;
+            boolean wasMounted = false;
+            List<String> mountPaths = getMountPaths();
+            if (mountPaths.isEmpty()) {
+                Device udisksDevice = DbusTools.getDevice(deviceAndNumber);
+                mountPath = udisksDevice.FilesystemMount(
+                        "auto", Arrays.asList(options));
+            } else {
+                mountPath = mountPaths.get(0);
+                wasMounted = true;
+                if (LOGGER.isLoggable(Level.FINEST)) {
+                    LOGGER.log(Level.FINEST, "{0} already mounted at {1}",
+                            new Object[]{this, mountPath}
+                    );
+                }
             }
+            return new MountInfo(mountPath, wasMounted);
+        } catch (DBusExecutionException ex) {
+            throw new DBusException(ex.getMessage());
         }
-        return new MountInfo(mountPath, wasMounted);
     }
 
     /**
