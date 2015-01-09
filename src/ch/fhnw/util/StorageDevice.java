@@ -106,16 +106,20 @@ public class StorageDevice implements Comparable<StorageDevice> {
     public StorageDevice(String device, long systemSize) throws DBusException {
         this.device = device;
         this.systemSize = systemSize;
-        vendor = DbusTools.getStringProperty(device, "DriveVendor");
-        model = DbusTools.getStringProperty(device, "DriveModel");
-        revision = DbusTools.getStringProperty(device, "DriveRevision");
-        serial = DbusTools.getStringProperty(device, "DriveSerial");
-        size = DbusTools.getLongProperty(device, "DeviceSize");
-        removable = DbusTools.getBooleanProperty(device, "DeviceIsRemovable");
-        systemInternal = DbusTools.getBooleanProperty(
-                device, "DeviceIsSystemInternal");
-        connectionInterface = DbusTools.getStringProperty(
-                device, "DriveConnectionInterface");
+        if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+            vendor = DbusTools.getStringProperty(device, "DriveVendor");
+            model = DbusTools.getStringProperty(device, "DriveModel");
+            revision = DbusTools.getStringProperty(device, "DriveRevision");
+            serial = DbusTools.getStringProperty(device, "DriveSerial");
+            size = DbusTools.getLongProperty(device, "DeviceSize");
+            removable = DbusTools.getBooleanProperty(device, "DeviceIsRemovable");
+            systemInternal = DbusTools.getBooleanProperty(
+                    device, "DeviceIsSystemInternal");
+            connectionInterface = DbusTools.getStringProperty(
+                    device, "DriveConnectionInterface");
+        } else {
+            // TODO...
+        }
         boolean isOpticalDisc = DbusTools.getBooleanProperty(
                 device, "DeviceIsOpticalDisc");
 

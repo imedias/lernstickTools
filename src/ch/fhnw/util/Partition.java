@@ -110,7 +110,18 @@ public class Partition {
             throws DBusException {
         LOGGER.log(Level.FINE, "device: \"{0}\", numberString: \"{1}\"",
                 new Object[]{device, numberString});
-        return new Partition(device, Integer.parseInt(numberString), systemSize);
+        if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+            return new Partition(
+                    device, Integer.parseInt(numberString), systemSize);
+        } else {
+            // check, if this device is a partiton at all
+            if (DbusTools.isPartition(device + numberString)) {
+                return new Partition(
+                        device, Integer.parseInt(numberString), systemSize);
+            } else {
+                return null;
+            }
+        }
     }
 
     private Partition(String device, int number, long systemSize)
