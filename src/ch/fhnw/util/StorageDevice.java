@@ -10,7 +10,10 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.xml.parsers.ParserConfigurationException;
+import org.freedesktop.dbus.Path;
 import org.freedesktop.dbus.exceptions.DBusException;
+import org.xml.sax.SAXException;
 
 /**
  * A storage device
@@ -78,15 +81,14 @@ public class StorageDevice implements Comparable<StorageDevice> {
     private static final ResourceBundle STRINGS
             = ResourceBundle.getBundle("ch/fhnw/util/Strings");
     private final String device;
-    private final String vendor;
-    private final String model;
-    private final String revision;
-    private final String serial;
-    private final long size;
     private final long systemSize;
-    private final boolean removable;
-    private final boolean systemInternal;
-    private final String connectionInterface;
+    private boolean systemInternal;
+    private String vendor;
+    private String model;
+    private String revision;
+    private String serial;
+    private boolean removable;
+    private long size;
     private final Type type;
     private List<Partition> partitions;
     private UpgradeVariant upgradeVariant;
@@ -106,22 +108,64 @@ public class StorageDevice implements Comparable<StorageDevice> {
     public StorageDevice(String device, long systemSize) throws DBusException {
         this.device = device;
         this.systemSize = systemSize;
+        boolean isOpticalDisc = false;
+        String connectionInterface = null;
         if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
             vendor = DbusTools.getStringProperty(device, "DriveVendor");
             model = DbusTools.getStringProperty(device, "DriveModel");
             revision = DbusTools.getStringProperty(device, "DriveRevision");
             serial = DbusTools.getStringProperty(device, "DriveSerial");
             size = DbusTools.getLongProperty(device, "DeviceSize");
-            removable = DbusTools.getBooleanProperty(device, "DeviceIsRemovable");
+            removable = DbusTools.getBooleanProperty(
+                    device, "DeviceIsRemovable");
             systemInternal = DbusTools.getBooleanProperty(
                     device, "DeviceIsSystemInternal");
             connectionInterface = DbusTools.getStringProperty(
                     device, "DriveConnectionInterface");
-        } else {
-            // TODO...
-        }
-        boolean isOpticalDisc = DbusTools.getBooleanProperty(
+            isOpticalDisc = DbusTools.getBooleanProperty(
                 device, "DeviceIsOpticalDisc");
+            
+        } else {
+            
+            try {
+                List<String> interfaceNames = 
+                        DbusTools.getDeviceInterfaceNames(device);
+                String blockInterfaceName = "org.freedesktop.UDisks2.Block";
+                if (interfaceNames.contains(blockInterfaceName)) {
+                    // query block device specific properties
+                    size = DbusTools.getDeviceLongProperty(
+                            device, blockInterfaceName, "Size");
+                    systemInternal = DbusTools.getDeviceBooleanProperty(
+                            device, blockInterfaceName, "HintSystem");
+                    
+                    // query drive specific properties
+                    Path driveObjectPath = DbusTools.getDevicePathProperty(
+                            device, blockInterfaceName, "Drive");
+                    String objectPath = driveObjectPath.toString();
+                    String driveInterface = "org.freedesktop.UDisks2.Drive";
+                    vendor = DbusTools.getStringProperty(
+                            objectPath, driveInterface, "Vendor");
+                    model = DbusTools.getStringProperty(
+                            objectPath, driveInterface, "Model");
+                    revision = DbusTools.getStringProperty(
+                            objectPath, driveInterface, "Revision");
+                    serial = DbusTools.getStringProperty(
+                            objectPath, driveInterface, "Serial");
+                    removable = DbusTools.getBooleanProperty(
+                            objectPath, driveInterface, "Removable");
+                    connectionInterface = DbusTools.getStringProperty(
+                            objectPath, driveInterface, "ConnectionBus");
+                    isOpticalDisc = DbusTools.getBooleanProperty(
+                            objectPath, driveInterface, "Optical");
+                }
+            } catch (SAXException ex) {
+                LOGGER.log(Level.SEVERE, "", ex);
+            } catch (IOException ex) {
+                LOGGER.log(Level.SEVERE, "", ex);
+            } catch (ParserConfigurationException ex) {
+                LOGGER.log(Level.SEVERE, "", ex);
+            }
+        }
 
         // little stupid heuristic to determine storage device type
         if (isOpticalDisc) {
