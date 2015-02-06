@@ -133,8 +133,6 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 String blockInterfaceName = "org.freedesktop.UDisks2.Block";
                 if (interfaceNames.contains(blockInterfaceName)) {
                     // query block device specific properties
-                    size = DbusTools.getDeviceLongProperty(
-                            device, blockInterfaceName, "Size");
                     systemInternal = DbusTools.getDeviceBooleanProperty(
                             device, blockInterfaceName, "HintSystem");
                     
@@ -153,6 +151,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
                             objectPath, driveInterface, "Serial");
                     removable = DbusTools.getBooleanProperty(
                             objectPath, driveInterface, "Removable");
+                    size = DbusTools.getLongProperty(
+                            objectPath, driveInterface, "Size");
                     connectionInterface = DbusTools.getStringProperty(
                             objectPath, driveInterface, "ConnectionBus");
                     isOpticalDisc = DbusTools.getBooleanProperty(
@@ -309,17 +309,6 @@ public class StorageDevice implements Comparable<StorageDevice> {
      */
     public boolean isRemovable() {
         return removable;
-    }
-
-    /**
-     * returns <code>true</code>, if this device is system internal,
-     * <code>false</code> otherwise
-     *
-     * @return <code>true</code>, if this device is system internal,
-     * <code>false</code> otherwise
-     */
-    public boolean isSystemInternal() {
-        return systemInternal;
     }
 
     /**

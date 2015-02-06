@@ -161,6 +161,25 @@ public class DbusTools {
                 busName, objectPath, DBus.Properties.class);
         return stringProperty.Get(interfaceName, property);
     }
+    
+    /**
+     * returns a property of an object as a byte array
+     *
+     * @param objectPath the object to query
+     * @param interfaceName the interface to query
+     * @param property the property to query
+     * @return a property of a partition device as a string
+     * @throws DBusException if a d-bus exception occurs
+     */
+    public static byte[] getByteArrayProperty(String objectPath,
+            String interfaceName, String property) throws DBusException {
+        LOGGER.log(Level.INFO, "objectPath = \"{0}\", interfaceName = \"{1}\", "
+                + "property = \"{2}\"",
+                new Object[]{objectPath, interfaceName, property});
+        DBus.Properties stringProperty = dbusSystemConnection.getRemoteObject(
+                busName, objectPath, DBus.Properties.class);
+        return stringProperty.Get(interfaceName, property);
+    }
 
     /**
      * returns a property of a device as a Path
@@ -327,7 +346,7 @@ public class DbusTools {
         return getInterfaceNames(deviceObjectPath + device);
     }
 
-    private static List<String> getInterfaceNames(String objectPath)
+    public static List<String> getInterfaceNames(String objectPath)
             throws DBusException, SAXException, IOException,
             ParserConfigurationException {
 
