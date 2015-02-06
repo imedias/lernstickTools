@@ -10,9 +10,11 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.xml.parsers.ParserConfigurationException;
 import org.freedesktop.dbus.exceptions.DBusException;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.freedesktop.udisks.Device;
+import org.xml.sax.SAXException;
 
 /**
  * A storage device partition
@@ -126,19 +128,50 @@ public class Partition {
 
     private Partition(String device, int number, long systemSize)
             throws DBusException {
+        
         LOGGER.log(Level.FINE, "device: \"{0}\", number = {1}",
                 new Object[]{device, number});
         this.device = device;
         this.number = number;
         this.systemSize = systemSize;
         deviceAndNumber = device + number;
-        offset = DbusTools.getLongProperty(deviceAndNumber, "PartitionOffset");
-        size = DbusTools.getLongProperty(deviceAndNumber, "PartitionSize");
-        idLabel = DbusTools.getStringProperty(deviceAndNumber, "IdLabel");
-        idType = DbusTools.getStringProperty(deviceAndNumber, "IdType");
-        type = DbusTools.getStringProperty(deviceAndNumber, "PartitionType");
-        isDrive = DbusTools.getBooleanProperty(
-                deviceAndNumber, "DeviceIsDrive");
+        
+        if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+            offset = DbusTools.getLongProperty(deviceAndNumber, "PartitionOffset");
+            size = DbusTools.getLongProperty(deviceAndNumber, "PartitionSize");
+            idLabel = DbusTools.getStringProperty(deviceAndNumber, "IdLabel");
+            idType = DbusTools.getStringProperty(deviceAndNumber, "IdType");
+            type = DbusTools.getStringProperty(deviceAndNumber, "PartitionType");
+            isDrive = DbusTools.getBooleanProperty(deviceAndNumber, "DeviceIsDrive");
+            
+        } else {
+            String prefix = "org.freedesktop.UDisks2.";
+            String objectPath = prefix + "block_devices." + deviceAndNumber;
+            String partitionInterface = prefix + "Partition";
+            offset = DbusTools.getLongProperty(
+                    objectPath, partitionInterface, "Offset");
+            size = DbusTools.getLongProperty(
+                    objectPath, partitionInterface, "Size");
+            type = DbusTools.getStringProperty(
+                    objectPath, partitionInterface, "Type");
+            
+            String blockInterface = prefix + "Block";
+            idLabel = DbusTools.getStringProperty(
+                    objectPath, blockInterface, "IdLabel");
+            idType = DbusTools.getStringProperty(
+                    objectPath, blockInterface, "IdType");
+            
+            boolean tmpDrive = false;
+            try {
+                List<String> interfaceNames = 
+                        DbusTools.getInterfaceNames(objectPath);
+                tmpDrive = !interfaceNames.contains(prefix + "Partition");
+            } catch (IOException | SAXException |
+                    ParserConfigurationException ex) {
+                LOGGER.log(Level.SEVERE, "", ex);
+            }
+            isDrive = tmpDrive;
+        }
     }
 
     @Override
