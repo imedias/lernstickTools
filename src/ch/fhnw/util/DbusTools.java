@@ -1,11 +1,15 @@
 package ch.fhnw.util;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -96,18 +100,47 @@ public class DbusTools {
                 deviceObjectPath + device, Device.class);
     }
 
+    public static List<String> getPartitions() {
+        // unfortunately, this sucks with dbus, we better parse /proc/partitions
+        //
+        // the format of the /proc/partitions file looks like this:
+        // major minor  #blocks  name
+        // 11        0    4097694 sr0        
+        List<String> lines = null;
+        try {
+            lines = LernstickFileTools.readFile(new File("/proc/partitions"));
+        } catch (IOException ex) {
+            LOGGER.log(Level.SEVERE, "", ex);
+        }
+        Pattern pattern = Pattern.compile("\\p{Space}*\\p{Digit}+\\p{Space}+"
+                + "\\p{Digit}+\\p{Space}+\\p{Digit}+\\p{Space}+(\\p{Alnum}+)");
+        List<String> partitions = new ArrayList<>();
+        for (String line : lines) {
+            Matcher matcher = pattern.matcher(line);
+            if (matcher.matches()) {
+                partitions.add(matcher.group(1));
+            }
+        }
+        Collections.sort(partitions);
+        return partitions;
+    }
+
+    public static byte[] removeNullByte(byte[] input) {
+        byte[] output = new byte[input.length - 1];
+        System.arraycopy(input, 0, output, 0, output.length);
+        return output;
+    }
+
     public static boolean isPartition(String device) throws DBusException {
         String dbusPath = deviceObjectPath + device;
         LOGGER.log(Level.INFO, "dbusPath = \"{0}\"", dbusPath);
-        DBus.Properties deviceProperties = dbusSystemConnection.getRemoteObject(
-                busName, dbusPath, DBus.Properties.class);
         try {
-            deviceProperties.Get(
-                    "org.freedesktop.UDisks2.Partition", "Size");
-            return true;
-        } catch (Exception e) {
+            List<String> interfaceNames = getInterfaceNames(dbusPath);
+            return interfaceNames.contains("org.freedesktop.UDisks2.Partition");
+        } catch (SAXException | IOException | ParserConfigurationException ex) {
+            LOGGER.log(Level.SEVERE, "", ex);
+            return false;
         }
-        return false;
     }
 
     /**
@@ -161,7 +194,7 @@ public class DbusTools {
                 busName, objectPath, DBus.Properties.class);
         return stringProperty.Get(interfaceName, property);
     }
-    
+
     /**
      * returns a property of an object as a byte array
      *
@@ -178,6 +211,30 @@ public class DbusTools {
                 new Object[]{objectPath, interfaceName, property});
         DBus.Properties stringProperty = dbusSystemConnection.getRemoteObject(
                 busName, objectPath, DBus.Properties.class);
+        return stringProperty.Get(interfaceName, property);
+    }
+
+    /**
+     * returns a property of an object as a list of lists
+     *
+     * @param objectPath the object to query
+     * @param interfaceName the interface to query
+     * @param property the property to query
+     * @return a property of a partition device as a string
+     * @throws DBusException if a d-bus exception occurs
+     */
+    public static List<List> getListListProperty(String objectPath,
+            String interfaceName, String property) throws DBusException {
+        LOGGER.log(Level.INFO, "objectPath = \"{0}\", interfaceName = \"{1}\", "
+                + "property = \"{2}\"",
+                new Object[]{objectPath, interfaceName, property});
+        DBus.Properties stringProperty = null;
+        try {
+            stringProperty = dbusSystemConnection.getRemoteObject(
+                    busName, objectPath, DBus.Properties.class);
+        } catch (DBusException dBusException) {
+            LOGGER.log(Level.WARNING, "", dBusException);
+        }
         return stringProperty.Get(interfaceName, property);
     }
 
@@ -251,7 +308,7 @@ public class DbusTools {
         UInt64 value = deviceProperties.Get(busName, property);
         return value.longValue();
     }
-    
+
     /**
      * returns a property of a partition device as a long value
      *
@@ -260,13 +317,13 @@ public class DbusTools {
      * @param property the property to query
      * @return a property of a partition device as a long value
      * @throws DBusException if a d-bus exception occurs
-     */    
+     */
     public static long getDeviceLongProperty(String device,
             String interfaceName, String property) throws DBusException {
         String objectPath = deviceObjectPath + device;
-        return getLongProperty(objectPath, interfaceName, property);        
+        return getLongProperty(objectPath, interfaceName, property);
     }
-    
+
     /**
      * returns a property of a partition device as a long value
      *
@@ -275,7 +332,7 @@ public class DbusTools {
      * @param property the property to query
      * @return a property of a partition device as a long value
      * @throws DBusException if a d-bus exception occurs
-     */    
+     */
     public static long getLongProperty(String objectPath,
             String interfaceName, String property) throws DBusException {
         LOGGER.log(Level.INFO, "objectPath = \"{0}\", interfaceName = \"{1}\", "
@@ -286,7 +343,6 @@ public class DbusTools {
         UInt64 value = properties.Get(interfaceName, property);
         return value.longValue();
     }
-    
 
     /**
      * returns a property of a partition device as a boolean value
@@ -305,7 +361,7 @@ public class DbusTools {
                 busName, dbusPath, DBus.Properties.class);
         return deviceProperties.Get(busName, property);
     }
-    
+
     /**
      * returns a property of a partition device as a boolean value
      *
@@ -318,9 +374,9 @@ public class DbusTools {
     public static Boolean getDeviceBooleanProperty(String device,
             String interfaceName, String property) throws DBusException {
         String objectPath = deviceObjectPath + device;
-        return getBooleanProperty(objectPath, interfaceName, property);        
+        return getBooleanProperty(objectPath, interfaceName, property);
     }
-    
+
     /**
      * returns a property of a partition device as a boolean value
      *
@@ -369,7 +425,7 @@ public class DbusTools {
         NodeList interfaceNodeList
                 = rootElement.getElementsByTagName("interface");
         int length = interfaceNodeList.getLength();
-        List<String> interfaceNames = new ArrayList<String>();
+        List<String> interfaceNames = new ArrayList<>();
         for (int i = 0; i < length; i++) {
             NamedNodeMap attributes = interfaceNodeList.item(i).getAttributes();
             interfaceNames.add(attributes.getNamedItem("name").getNodeValue());

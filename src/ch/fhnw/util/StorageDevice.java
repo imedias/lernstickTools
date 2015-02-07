@@ -3,7 +3,6 @@ package ch.fhnw.util;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.ResourceBundle;
 import java.util.logging.Level;
@@ -123,19 +122,19 @@ public class StorageDevice implements Comparable<StorageDevice> {
             connectionInterface = DbusTools.getStringProperty(
                     device, "DriveConnectionInterface");
             isOpticalDisc = DbusTools.getBooleanProperty(
-                device, "DeviceIsOpticalDisc");
-            
+                    device, "DeviceIsOpticalDisc");
+
         } else {
-            
+
             try {
-                List<String> interfaceNames = 
-                        DbusTools.getDeviceInterfaceNames(device);
+                List<String> interfaceNames
+                        = DbusTools.getDeviceInterfaceNames(device);
                 String blockInterfaceName = "org.freedesktop.UDisks2.Block";
                 if (interfaceNames.contains(blockInterfaceName)) {
                     // query block device specific properties
                     systemInternal = DbusTools.getDeviceBooleanProperty(
                             device, blockInterfaceName, "HintSystem");
-                    
+
                     // query drive specific properties
                     Path driveObjectPath = DbusTools.getDevicePathProperty(
                             device, blockInterfaceName, "Drive");
@@ -319,34 +318,14 @@ public class StorageDevice implements Comparable<StorageDevice> {
     public synchronized List<Partition> getPartitions() {
         if (partitions == null) {
             // create new list
-            partitions = new ArrayList<Partition>();
+            partitions = new ArrayList<>();
 
-            // call udisks to get partition info
-            ProcessExecutor processExecutor = new ProcessExecutor();
-            LOGGER.log(Level.INFO,
-                    "calling \"udisks --enumerate\" to get the partitions of {0}",
-                    device);
-            processExecutor.executeProcess(true, true, "udisks", "--enumerate");
-            List<String> lines = processExecutor.getStdOutList();
-            Collections.sort(lines);
-
-            // parse udisks output, example:
-            //      /org/freedesktop/UDisks/devices/sdb
-            //      /org/freedesktop/UDisks/devices/sda1
-            //      /org/freedesktop/UDisks/devices/sda2
-            //      /org/freedesktop/UDisks/devices/sr0
-            //      /org/freedesktop/UDisks/devices/sdb2
-            //      /org/freedesktop/UDisks/devices/loop0
-            //      /org/freedesktop/UDisks/devices/loop1
-            //      /org/freedesktop/UDisks/devices/sdb1
-            //      /org/freedesktop/UDisks/devices/sda
-            // we only want to catch the partition numbers...
-            Pattern pattern = Pattern.compile(
-                    "/org/freedesktop/UDisks/devices/" + device + "(\\d+)");
-            for (String line : lines) {
-                Matcher matcher = pattern.matcher(line);
+            List<String> partitionStings = DbusTools.getPartitions();
+            Pattern pattern = Pattern.compile(device + "(\\d+)");
+            for (String partitionString : partitionStings) {
+                Matcher matcher = pattern.matcher(partitionString);
                 if (matcher.matches()) {
-                    partitions.add(parsePartition(matcher));
+                    partitions.add(parsePartition(matcher.group(1)));
                 }
             }
 
@@ -531,10 +510,14 @@ public class StorageDevice implements Comparable<StorageDevice> {
         return exchangePartition;
     }
 
-    private Partition parsePartition(Matcher matcher) {
+    /**
+     * 
+     * @param numberString the partition number as a string, e.g. "1" for sda1
+     * @return the partition
+     */
+    private Partition parsePartition(String numberString) {
         Partition partition = null;
         try {
-            String numberString = matcher.group(1);
             partition = Partition.getPartitionFromDevice(
                     device, numberString, systemSize);
             if (partition.isPersistencePartition()) {
@@ -554,10 +537,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 systemPartition = partition;
             }
-        } catch (NumberFormatException numberFormatException) {
+        } catch (NumberFormatException | DBusException numberFormatException) {
             LOGGER.log(Level.WARNING, "", numberFormatException);
-        } catch (DBusException ex) {
-            LOGGER.log(Level.WARNING, "", ex);
         }
         return partition;
     }

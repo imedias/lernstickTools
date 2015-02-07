@@ -128,14 +128,14 @@ public class Partition {
 
     private Partition(String device, int number, long systemSize)
             throws DBusException {
-        
+
         LOGGER.log(Level.FINE, "device: \"{0}\", number = {1}",
                 new Object[]{device, number});
         this.device = device;
         this.number = number;
         this.systemSize = systemSize;
         deviceAndNumber = device + number;
-        
+
         if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
             offset = DbusTools.getLongProperty(deviceAndNumber, "PartitionOffset");
             size = DbusTools.getLongProperty(deviceAndNumber, "PartitionSize");
@@ -143,29 +143,31 @@ public class Partition {
             idType = DbusTools.getStringProperty(deviceAndNumber, "IdType");
             type = DbusTools.getStringProperty(deviceAndNumber, "PartitionType");
             isDrive = DbusTools.getBooleanProperty(deviceAndNumber, "DeviceIsDrive");
-            
+
         } else {
-            String prefix = "org.freedesktop.UDisks2.";
-            String objectPath = prefix + "block_devices." + deviceAndNumber;
-            String partitionInterface = prefix + "Partition";
+            String objectPath = "/org/freedesktop/UDisks2/block_devices/"
+                    + deviceAndNumber;
+            String interfacePrefix = "org.freedesktop.UDisks2.";
+            String partitionInterface = interfacePrefix + "Partition";
             offset = DbusTools.getLongProperty(
                     objectPath, partitionInterface, "Offset");
             size = DbusTools.getLongProperty(
                     objectPath, partitionInterface, "Size");
             type = DbusTools.getStringProperty(
                     objectPath, partitionInterface, "Type");
-            
-            String blockInterface = prefix + "Block";
+
+            String blockInterface = interfacePrefix + "Block";
             idLabel = DbusTools.getStringProperty(
                     objectPath, blockInterface, "IdLabel");
             idType = DbusTools.getStringProperty(
                     objectPath, blockInterface, "IdType");
-            
+
             boolean tmpDrive = false;
             try {
-                List<String> interfaceNames = 
-                        DbusTools.getInterfaceNames(objectPath);
-                tmpDrive = !interfaceNames.contains(prefix + "Partition");
+                List<String> interfaceNames
+                        = DbusTools.getInterfaceNames(objectPath);
+                tmpDrive = !interfaceNames.contains(
+                        interfacePrefix + "Partition");
             } catch (IOException | SAXException |
                     ParserConfigurationException ex) {
                 LOGGER.log(Level.SEVERE, "", ex);
@@ -286,8 +288,28 @@ public class Partition {
      * @throws DBusException if a dbus exception occurs
      */
     public List<String> getMountPaths() throws DBusException {
-        return DbusTools.getStringListProperty(
-                deviceAndNumber, "DeviceMountPaths");
+
+        if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+            return DbusTools.getStringListProperty(
+                    deviceAndNumber, "DeviceMountPaths");
+
+        } else {
+            String objectPath = "/org/freedesktop/UDisks2/block_devices/"
+                    + deviceAndNumber;
+            List<List> mountPaths = DbusTools.getListListProperty(
+                    objectPath, "org.freedesktop.UDisks2.Filesystem",
+                    "MountPoints");
+            List<String> resultList = new ArrayList<>();
+            for (List mountPath : mountPaths) {
+                // ignore terminating 0 (therefore "- 1")
+                byte[] asBytes = new byte[mountPath.size() - 1];
+                for (int i = 0; i < asBytes.length; i++) {
+                    asBytes[i] = (byte) mountPath.get(i);
+                }
+                resultList.add(new String(asBytes));
+            }
+            return resultList;
+        }
     }
 
     /**
@@ -407,13 +429,36 @@ public class Partition {
      */
     public MountInfo mount(String... options) throws DBusException {
         try {
-            String mountPath;
+            String mountPath = null;
             boolean wasMounted = false;
             List<String> mountPaths = getMountPaths();
             if (mountPaths.isEmpty()) {
-                Device udisksDevice = DbusTools.getDevice(deviceAndNumber);
-                mountPath = udisksDevice.FilesystemMount(
-                        "auto", Arrays.asList(options));
+                if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+                    Device udisksDevice = DbusTools.getDevice(deviceAndNumber);
+                    mountPath = udisksDevice.FilesystemMount(
+                            "auto", Arrays.asList(options));
+                } else {
+                    // creating a Java interface for
+                    // org.freedestkop.UDisks2.Filesystem fails, see here:
+                    // https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=777241
+                    //
+                    // So we have to call udisksctl directly.
+                    // This utterly sucks but our options are limited...
+                    ProcessExecutor processExecutor = new ProcessExecutor();
+                    int returnValue = processExecutor.executeProcess(
+                            true, true, "udisksctl", "mount", "-b",
+                            "/dev/" + deviceAndNumber);
+                    if (returnValue == 0) {
+                        String output = processExecutor.getStdOutList().get(0);
+                        LOGGER.log(Level.FINE, "output: \"{0}\"", output);
+                        Pattern pattern = Pattern.compile(
+                                "Mounted /dev/\\p{Alnum}+ at (.*).");
+                        Matcher matcher = pattern.matcher(output);
+                        if (matcher.matches()) {
+                            mountPath = matcher.group(1);
+                        }
+                    }
+                }
             } else {
                 mountPath = mountPaths.get(0);
                 wasMounted = true;
@@ -423,8 +468,10 @@ public class Partition {
                     );
                 }
             }
+            LOGGER.log(Level.INFO, "mountPath: {0}", mountPath);
             return new MountInfo(mountPath, wasMounted);
         } catch (DBusExecutionException ex) {
+            LOGGER.log(Level.WARNING, "", ex);
             throw new DBusException(ex.getMessage());
         }
     }
@@ -457,14 +504,30 @@ public class Partition {
                 LOGGER.log(Level.INFO,
                         "/dev/{0} is mounted on {1}, calling umount...",
                         new Object[]{deviceAndNumber, mountPaths.get(0)});
-                try {
-                    Device dbusDevice = DbusTools.getDevice(deviceAndNumber);
-                    dbusDevice.FilesystemUnmount(new ArrayList<String>());
-                    success = true;
-                } catch (DBusException ex) {
-                    handleUmountException(ex);
-                } catch (DBusExecutionException ex) {
-                    handleUmountException(ex);
+                if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+                    try {
+                        Device dbusDevice = DbusTools.getDevice(deviceAndNumber);
+                        dbusDevice.FilesystemUnmount(new ArrayList<String>());
+                        success = true;
+                    } catch (DBusException | DBusExecutionException ex) {
+                        handleUmountException(ex);
+                    }
+                } else {
+                    // creating a Java interface for
+                    // org.freedestkop.UDisks2.Filesystem fails, see here:
+                    // https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=777241
+                    //
+                    // So we have to call udisksctl directly.
+                    // This utterly sucks but our options are limited...
+                    ProcessExecutor processExecutor = new ProcessExecutor();
+                    int returnValue = processExecutor.executeProcess(
+                            true, true, "udisksctl", "unmount", "-b",
+                            "/dev/" + deviceAndNumber);
+                    if (returnValue == 0) {
+                        success = true;
+                    } else {
+                        handleUmountException(new Exception("unmount failed"));
+                    }
                 }
             } else {
                 LOGGER.log(Level.INFO,
