@@ -18,6 +18,7 @@ import org.freedesktop.dbus.DBusConnection;
 import org.freedesktop.dbus.Path;
 import org.freedesktop.dbus.UInt64;
 import org.freedesktop.dbus.exceptions.DBusException;
+import org.freedesktop.dbus.exceptions.DBusExecutionException;
 import org.freedesktop.udisks.Device;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -55,36 +56,49 @@ public class DbusTools {
             // determine udisks version
             try {
                 // this only works with udisks v1
-                DBus.Properties version = dbusSystemConnection.getRemoteObject(
-                        "org.freedesktop.UDisks", "DaemonVersion",
-                        DBus.Properties.class);
+                DBus.Properties properties
+                        = dbusSystemConnection.getRemoteObject(
+                                "org.freedesktop.UDisks",
+                                "/org/freedesktop/UDisks",
+                                DBus.Properties.class);
+                String udisksVersion = properties.Get(
+                        "org.freedesktop.UDisks", "DaemonVersion");
                 v1found = true;
+                LOGGER.log(Level.INFO,
+                        "detected UDisks version 1 ({0})", udisksVersion);
 
-            } catch (DBusException dBusException) {
+            } catch (DBusException | DBusExecutionException ex) {
+                LOGGER.log(Level.INFO, "calling a UDisks 1 method failed with "
+                        + "the following exception:", ex);
+                
                 // this only works with udisks v2
-                DBus.Properties version = dbusSystemConnection.getRemoteObject(
-                        "org.freedesktop.UDisks2.Manager", "/Version",
-                        DBus.Properties.class);
+                DBus.Properties properties
+                        = dbusSystemConnection.getRemoteObject(
+                                "org.freedesktop.UDisks2",
+                                "/org/freedesktop/UDisks2/Manager",
+                                DBus.Properties.class);
+                String udisksVersion = properties.Get(
+                        "org.freedesktop.UDisks2.Manager", "Version");
                 v2found = true;
+                LOGGER.log(Level.INFO,
+                        "detected UDisks version 2 ({0})", udisksVersion);
             }
-        } catch (DBusException ex) {
-            LOGGER.log(Level.SEVERE, null, ex);
+        } catch (DBusException | DBusExecutionException ex) {
+            LOGGER.log(Level.SEVERE, "unknown/unsupported UDisks version", ex);
         }
 
         if (v1found) {
             DBUS_VERSION = DbusVersion.V1;
-        } else if (v2found) {
-            DBUS_VERSION = DbusVersion.V2;
-        } else {
-            DBUS_VERSION = null;
-        }
-
-        if (DBUS_VERSION == DbusVersion.V1) {
             busName = "org.freedesktop.UDisks";
             deviceObjectPath = "/org/freedesktop/UDisks/devices/";
-        } else {
+        } else if (v2found) {
+            DBUS_VERSION = DbusVersion.V2;
             busName = "org.freedesktop.UDisks2";
             deviceObjectPath = "/org/freedesktop/UDisks2/block_devices/";
+        } else {
+            DBUS_VERSION = null;
+            busName = null;
+            deviceObjectPath = null;
         }
     }
 
