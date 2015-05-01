@@ -406,13 +406,8 @@ public class Partition {
                     umount();
                 }
             }
-        } catch (DBusExecutionException ex) {
-            LOGGER.log(Level.WARNING, "", ex);
-            usedSpace = -1l;
-        } catch (DBusException ex) {
-            LOGGER.log(Level.WARNING, "", ex);
-            usedSpace = -1l;
-        } catch (NumberFormatException ex) {
+        } catch (DBusExecutionException | DBusException |
+                NumberFormatException ex) {
             LOGGER.log(Level.WARNING, "", ex);
             usedSpace = -1l;
         }
