@@ -396,8 +396,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
             for (Partition partition : partitions) {
                 if (partition.isSystemPartition()) {
                     long partitionSize = partition.getSize();
-                    // wild guess: give file system maximum 1% overhead...
-                    long saveSystemSize = (long) (systemSize * 1.01);
+                    long saveSystemSize = StorageTools.getEnlargedSystemSize();
                     if (LOGGER.isLoggable(Level.INFO)) {
                         LOGGER.log(Level.INFO,
                                 "systemSize: {0}, saveSystemSize: {1}, size of {2}: {3}",
