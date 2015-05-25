@@ -70,7 +70,7 @@ public class DbusTools {
             } catch (DBusException | DBusExecutionException ex) {
                 LOGGER.log(Level.INFO, "calling a UDisks 1 method failed with "
                         + "the following exception:", ex);
-                
+
                 // this only works with udisks v2
                 DBus.Properties properties
                         = dbusSystemConnection.getRemoteObject(
@@ -150,7 +150,12 @@ public class DbusTools {
         LOGGER.log(Level.INFO, "dbusPath = \"{0}\"", dbusPath);
         try {
             List<String> interfaceNames = getInterfaceNames(dbusPath);
-            return interfaceNames.contains("org.freedesktop.UDisks2.Partition");
+            boolean isPartition = interfaceNames.contains(
+                    "org.freedesktop.UDisks2.Partition");
+            String logMessage
+                    = "{0} is " + (isPartition ? "a" : "no") + " partition";
+            LOGGER.log(Level.FINE, logMessage, dbusPath);
+            return isPartition;
         } catch (SAXException | IOException | ParserConfigurationException ex) {
             LOGGER.log(Level.SEVERE, "", ex);
             return false;
@@ -444,6 +449,20 @@ public class DbusTools {
             NamedNodeMap attributes = interfaceNodeList.item(i).getAttributes();
             interfaceNames.add(attributes.getNamedItem("name").getNodeValue());
         }
+        
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append(objectPath);
+        stringBuilder.append(" has the follwing interfaces:\n");
+        for (int i = 0, size = interfaceNames.size(); i < size; i++) {
+            stringBuilder.append('\t');
+            stringBuilder.append(interfaceNames.get(i));
+            if (i != size - 1) {
+                stringBuilder.append(System.lineSeparator());
+            }
+        }
+        String logMessage = stringBuilder.toString();
+        LOGGER.info(logMessage);
+        
         return interfaceNames;
     }
 }
