@@ -434,6 +434,18 @@ public class DbusTools {
         // parse xml
         DocumentBuilderFactory documentBuilderFactory
                 = DocumentBuilderFactory.newInstance();
+        
+        // The standard document builder tries to validate the DTD.
+        // If the system is offline (as it is mostly the case in the exam
+        // environment), documentBuilder.parse(inputSource) would just fail
+        // with the following exceptin:
+        // java.net.UnknownHostException: www.freedesktop.org
+        // Therefore we try to disable DTD validation here.
+        documentBuilderFactory.setValidating(false);
+        documentBuilderFactory.setFeature(
+                "http://apache.org/xml/features/nonvalidating/load-external-dtd",
+                false);
+        
         DocumentBuilder documentBuilder
                 = documentBuilderFactory.newDocumentBuilder();
         InputSource inputSource = new InputSource(new StringReader(xml));
@@ -449,7 +461,7 @@ public class DbusTools {
             NamedNodeMap attributes = interfaceNodeList.item(i).getAttributes();
             interfaceNames.add(attributes.getNamedItem("name").getNodeValue());
         }
-        
+
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(objectPath);
         stringBuilder.append(" has the follwing interfaces:\n");
@@ -462,7 +474,7 @@ public class DbusTools {
         }
         String logMessage = stringBuilder.toString();
         LOGGER.info(logMessage);
-        
+
         return interfaceNames;
     }
 }
