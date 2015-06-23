@@ -203,6 +203,31 @@ public class Partition {
         return stringBuilder.toString();
     }
 
+    public <T> T executeMounted(Action<T> action)
+            throws DBusException {
+
+        // make sure partition is mounted before executing the action
+        MountInfo mountInfo = null;
+        if (!isMounted()) {
+            mountInfo = mount();
+        }
+        File mountPath = new File(getMountPath());
+
+        // execute generic action
+        T t = action.execute(mountPath);
+
+        // cleanup
+        if ((mountInfo != null) && (!mountInfo.alreadyMounted())) {
+            umount();
+        }
+        return t;
+    }
+
+    public static abstract class Action<T> {
+
+        public abstract T execute(File mountPath);
+    }
+
     /**
      * returns the StorageDevice of this Partition
      *
