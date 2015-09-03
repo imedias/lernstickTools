@@ -1,6 +1,7 @@
 package ch.fhnw.util;
 
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -109,14 +110,26 @@ public class StorageDevice implements Comparable<StorageDevice> {
         this.systemSize = systemSize;
         boolean isOpticalDisc = false;
         String connectionInterface = null;
+
+        /*
+         * The Udisks2 interface "Drive" reports *all* USB drives as removable,
+         * even those where /sys/block/[device]/removable is '0'.
+         * Because the value in /sys/block/[device]/removable is the correct one
+         * we use it instead of the more "modern" Udisks2 interface. :-P
+         */
+        try {
+            removable = new FileReader(
+                    "/sys/block/" + device + "/removable").read() == '1';
+        } catch (IOException ex) {
+            LOGGER.log(Level.WARNING, "", ex);
+        }
+
         if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
             vendor = DbusTools.getStringProperty(device, "DriveVendor");
             model = DbusTools.getStringProperty(device, "DriveModel");
             revision = DbusTools.getStringProperty(device, "DriveRevision");
             serial = DbusTools.getStringProperty(device, "DriveSerial");
             size = DbusTools.getLongProperty(device, "DeviceSize");
-            removable = DbusTools.getBooleanProperty(
-                    device, "DeviceIsRemovable");
             systemInternal = DbusTools.getBooleanProperty(
                     device, "DeviceIsSystemInternal");
             connectionInterface = DbusTools.getStringProperty(
@@ -148,8 +161,6 @@ public class StorageDevice implements Comparable<StorageDevice> {
                             objectPath, driveInterface, "Revision");
                     serial = DbusTools.getStringProperty(
                             objectPath, driveInterface, "Serial");
-                    removable = DbusTools.getBooleanProperty(
-                            objectPath, driveInterface, "Removable");
                     size = DbusTools.getLongProperty(
                             objectPath, driveInterface, "Size");
                     connectionInterface = DbusTools.getStringProperty(
@@ -157,11 +168,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
                     isOpticalDisc = DbusTools.getBooleanProperty(
                             objectPath, driveInterface, "Optical");
                 }
-            } catch (SAXException ex) {
-                LOGGER.log(Level.SEVERE, "", ex);
-            } catch (IOException ex) {
-                LOGGER.log(Level.SEVERE, "", ex);
-            } catch (ParserConfigurationException ex) {
+            } catch (SAXException | IOException |
+                    ParserConfigurationException ex) {
                 LOGGER.log(Level.SEVERE, "", ex);
             }
         }
@@ -173,8 +181,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
             if (device.startsWith("mmcblk")) {
                 type = Type.SDMemoryCard;
             } else {
-                if (connectionInterface.equals("usb")
-                        && (systemInternal == false)) {
+                if ((systemInternal == false)
+                        && "usb".equals(connectionInterface)) {
                     type = Type.USBFlashDrive;
                 } else {
                     type = Type.HardDrive;
@@ -510,7 +518,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
     }
 
     /**
-     * 
+     *
      * @param numberString the partition number as a string, e.g. "1" for sda1
      * @return the partition
      */
