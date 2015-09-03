@@ -30,13 +30,13 @@ public class LernstickFileTools {
      * @throws IOException if an I/O exception occurs
      */
     public static List<String> readFile(File file) throws IOException {
-        List<String> lines = new ArrayList<String>();
-        BufferedReader reader = new BufferedReader(new FileReader(file));
-        for (String line = reader.readLine(); line != null;) {
-            lines.add(line);
-            line = reader.readLine();
+        List<String> lines = new ArrayList<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            for (String line = reader.readLine(); line != null;) {
+                lines.add(line);
+                line = reader.readLine();
+            }
         }
-        reader.close();
         return lines;
     }
 
