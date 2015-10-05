@@ -348,9 +348,11 @@ public class StorageDevice implements Comparable<StorageDevice> {
      *
      * @return if and how the storage device can be upgraded
      * @throws DBusException if a dbus exception occurs
+     * @throws java.io.IOException if determining the size of /home and
+     * /etc/cups fails
      */
     public synchronized UpgradeVariant getUpgradeVariant()
-            throws DBusException {
+            throws DBusException, IOException {
         // lazy initialization of upgradeVariant
         if (upgradeVariant == null) {
 
@@ -361,6 +363,36 @@ public class StorageDevice implements Comparable<StorageDevice> {
             if (systemPartition == null) {
                 noUpgradeReason
                         = STRINGS.getString("No_System_Partition_Found");
+                upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+                return upgradeVariant;
+            }
+
+            if (dataPartition == null) {
+                noUpgradeReason
+                        = STRINGS.getString("No_Data_Partition_Found");
+                upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+                return upgradeVariant;
+            }
+
+            // determine the size of the data to keep (/home and /etc/cups)
+            MountInfo systemMountInfo = systemPartition.mount();
+            List<String> readOnlyMountPoints
+                    = LernstickFileTools.mountAllSquashFS(
+                            systemMountInfo.getMountPath());
+            String dataMountPoint = dataPartition.mount().getMountPath();
+            String branchDefinition = LernstickFileTools.getBranchDefinition(
+                    dataMountPoint, readOnlyMountPoints);
+            File cowDir = LernstickFileTools.mountAufs(branchDefinition);
+            File homeDir = new File(cowDir, "home");
+            long homeSize = LernstickFileTools.getSize(homeDir.toPath());
+            File cupsDir = new File(cowDir, "/ect/cups");
+            long cupsSize = LernstickFileTools.getSize(cupsDir.toPath());
+            long oldDataSize = homeSize + cupsSize;
+            // add a safety factor for file system overhead
+            long oldDataSizeEnlarged = (long) (oldDataSize * 1.1);
+            if (oldDataSizeEnlarged > dataPartition.getSize()) {
+                noUpgradeReason
+                        = STRINGS.getString("Data_Partition_Too_Small");
                 upgradeVariant = UpgradeVariant.IMPOSSIBLE;
                 return upgradeVariant;
             }
