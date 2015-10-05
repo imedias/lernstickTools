@@ -10,9 +10,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.text.MessageFormat;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.ResourceBundle;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -26,6 +28,8 @@ public class LernstickFileTools {
 
     private static final Logger LOGGER
             = Logger.getLogger(LernstickFileTools.class.getName());
+    private static final ResourceBundle STRINGS
+            = ResourceBundle.getBundle("ch/fhnw/util/Strings");
     private final static NumberFormat NUMBER_FORMAT
             = NumberFormat.getInstance();
 
@@ -239,4 +243,24 @@ public class LernstickFileTools {
 
         return size.get();
     }
+
+    /**
+     * unmounts a device or mountpoint
+     *
+     * @param deviceOrMountpoint the device or mountpoint to unmount
+     * @throws IOException
+     */
+    public static void umount(String deviceOrMountpoint) throws IOException {
+        ProcessExecutor processExecutor = new ProcessExecutor();
+        int exitValue = processExecutor.executeProcess(
+                "umount", deviceOrMountpoint);
+        if (exitValue != 0) {
+            String errorMessage = STRINGS.getString("Error_Umount");
+            errorMessage = MessageFormat.format(
+                    errorMessage, deviceOrMountpoint);
+            LOGGER.severe(errorMessage);
+            throw new IOException(errorMessage);
+        }
+    }
+
 }

@@ -353,150 +353,170 @@ public class StorageDevice implements Comparable<StorageDevice> {
      */
     public synchronized UpgradeVariant getUpgradeVariant()
             throws DBusException, IOException {
+
         // lazy initialization of upgradeVariant
-        if (upgradeVariant == null) {
+        if (upgradeVariant != null) {
+            return upgradeVariant;
+        }
 
-            // !!! must be called before the next check, otherwise bootPartition
-            // !!! could still be null even when there is one
-            getPartitions();
+        // !!! must be called before the next check, otherwise bootPartition
+        // !!! could still be null even when there is one
+        getPartitions();
 
-            if (systemPartition == null) {
-                noUpgradeReason
-                        = STRINGS.getString("No_System_Partition_Found");
-                upgradeVariant = UpgradeVariant.IMPOSSIBLE;
-                return upgradeVariant;
-            }
+        if (systemPartition == null) {
+            noUpgradeReason = STRINGS.getString("No_System_Partition_Found");
+            upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+            return upgradeVariant;
+        }
 
-            if (dataPartition == null) {
-                noUpgradeReason
-                        = STRINGS.getString("No_Data_Partition_Found");
-                upgradeVariant = UpgradeVariant.IMPOSSIBLE;
-                return upgradeVariant;
-            }
+        if (dataPartition == null) {
+            noUpgradeReason = STRINGS.getString("No_Data_Partition_Found");
+            upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+            return upgradeVariant;
+        }
 
-            // determine the size of the data to keep (/home and /etc/cups)
-            MountInfo systemMountInfo = systemPartition.mount();
-            List<String> readOnlyMountPoints
-                    = LernstickFileTools.mountAllSquashFS(
-                            systemMountInfo.getMountPath());
-            String dataMountPoint = dataPartition.mount().getMountPath();
-            String branchDefinition = LernstickFileTools.getBranchDefinition(
-                    dataMountPoint, readOnlyMountPoints);
-            File cowDir = LernstickFileTools.mountAufs(branchDefinition);
-            File homeDir = new File(cowDir, "home");
-            long homeSize = LernstickFileTools.getSize(homeDir.toPath());
-            File cupsDir = new File(cowDir, "/ect/cups");
-            long cupsSize = LernstickFileTools.getSize(cupsDir.toPath());
-            long oldDataSize = homeSize + cupsSize;
-            // add a safety factor for file system overhead
-            long oldDataSizeEnlarged = (long) (oldDataSize * 1.1);
-            if (oldDataSizeEnlarged > dataPartition.getSize()) {
-                noUpgradeReason
-                        = STRINGS.getString("Data_Partition_Too_Small");
-                upgradeVariant = UpgradeVariant.IMPOSSIBLE;
-                return upgradeVariant;
-            }
+        // determine the size of the data to keep (/home and /etc/cups)
+        MountInfo systemMountInfo = systemPartition.mount();
+        List<String> readOnlyMountPoints = LernstickFileTools.mountAllSquashFS(
+                systemMountInfo.getMountPath());
+        MountInfo dataMountInfo = dataPartition.mount();
+        String dataMountPoint = dataMountInfo.getMountPath();
+        String branchDefinition = LernstickFileTools.getBranchDefinition(
+                dataMountPoint, readOnlyMountPoints);
+        File cowDir = LernstickFileTools.mountAufs(branchDefinition);
+        File homeDir = new File(cowDir, "home");
+        long homeSize = LernstickFileTools.getSize(homeDir.toPath());
+        LOGGER.log(Level.INFO, "homeSize : {0}",
+                LernstickFileTools.getDataVolumeString(homeSize, 1));
+        File cupsDir = new File(cowDir, "etc/cups");
+        long cupsSize = LernstickFileTools.getSize(cupsDir.toPath());
+        LOGGER.log(Level.INFO, "cupsSize : {0}",
+                LernstickFileTools.getDataVolumeString(cupsSize, 1));
+        long oldDataSize = homeSize + cupsSize;
+        LOGGER.log(Level.INFO, "oldDataSize : {0}",
+                LernstickFileTools.getDataVolumeString(oldDataSize, 1));
+        // add a safety factor for file system overhead
+        long oldDataSizeEnlarged = (long) (oldDataSize * 1.1);
+        LOGGER.log(Level.INFO, "oldDataSizeEnlarged : {0}",
+                LernstickFileTools.getDataVolumeString(
+                        oldDataSizeEnlarged, 1));
+        long dataPartitionSize = dataPartition.getSize();
+        LOGGER.log(Level.INFO, "dataPartitionSize : {0}",
+                LernstickFileTools.getDataVolumeString(dataPartitionSize, 1));
+        // umount all temporary mountpoints
+        LernstickFileTools.umount(cowDir.getPath());
+        for (String readOnlyMountPoint : readOnlyMountPoints) {
+            LernstickFileTools.umount(readOnlyMountPoint);
+        }
+        if (!dataMountInfo.alreadyMounted()) {
+            dataPartition.umount();
+        }
 
-            // check partitioning schema
-            if (bootPartition == null) {
-                // old partitioning schema without any boot partition
-                setDestructiveUpgradeVariant();
-                return upgradeVariant;
+        if (oldDataSizeEnlarged > dataPartitionSize) {
+            noUpgradeReason = STRINGS.getString("Data_Partition_Too_Small");
+            upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+            return upgradeVariant;
+        }
 
-            } else {
-                switch (bootPartition.getNumber()) {
-                    case 1:
-                        // fine, current partitioning schema
+        // check partitioning schema
+        if (bootPartition == null) {
+            // old partitioning schema without any boot partition
+            setDestructiveUpgradeVariant();
+            return upgradeVariant;
+
+        } else {
+            switch (bootPartition.getNumber()) {
+                case 1:
+                    // fine, current partitioning schema
+                    break;
+                case 2:
+                    if ((exchangePartition != null)
+                            && (exchangePartition.getNumber() == 1)) {
+                        // fine, we have the partitioning schema for
+                        // older, *removable* USB flash drives:
+                        //  1. partition: exchange
+                        //  2. partition: boot
                         break;
-                    case 2:
-                        if ((exchangePartition != null)
-                                && (exchangePartition.getNumber() == 1)) {
-                            // fine, we have the partitioning schema for
-                            // older, *removable* USB flash drives:
-                            //  1. partition: exchange
-                            //  2. partition: boot
-                            break;
-                        } else {
-                            // unknown partitioning schema
-                            setDestructiveUpgradeVariant();
-                            return upgradeVariant;
-                        }
-                    default:
+                    } else {
                         // unknown partitioning schema
                         setDestructiveUpgradeVariant();
                         return upgradeVariant;
-                }
-            }
-
-            // Even though we already know the system partition we need to loop
-            // here because we also need to know the previous partition to
-            // decide if we can repartition the device.
-            long remaining = -1;
-            Partition previousPartition = null;
-            for (Partition partition : partitions) {
-                if (partition.isSystemPartition()) {
-                    long partitionSize = partition.getSize();
-                    long saveSystemSize = StorageTools.getEnlargedSystemSize();
-                    if (LOGGER.isLoggable(Level.INFO)) {
-                        LOGGER.log(Level.INFO,
-                                "systemSize: {0}, saveSystemSize: {1}, size of {2}: {3}",
-                                new Object[]{
-                                    systemSize, saveSystemSize,
-                                    partition.getDeviceAndNumber(),
-                                    partitionSize
-                                });
                     }
-                    remaining = partitionSize - saveSystemSize;
-                    LOGGER.log(Level.FINE, "remaining = {0}", remaining);
-                    if (remaining >= 0) {
-                        // the new system fits into the current system partition
-                        upgradeVariant = UpgradeVariant.REGULAR;
-                        return upgradeVariant;
-                    }
-
-                    // The new system is larger than the current system
-                    // partition. Check if repartitioning is possible.
-                    //
-                    // TODO: more sophisticated checks
-                    //  - device with partition gaps
-                    //  - expand in both directions
-                    //  - ...
-                    if ((previousPartition != null)
-                            && (!previousPartition.isExtended())) {
-                        // right now we can only resize ext partitions
-                        if (previousPartition.hasExtendedFilesystem()) {
-                            long previousUsedSpace;
-                            if (previousPartition.isPersistencePartition()) {
-                                previousUsedSpace
-                                        = previousPartition.getUsedSpace(true);
-                            } else {
-                                previousUsedSpace
-                                        = previousPartition.getUsedSpace(false);
-                            }
-
-                            long usableSpace
-                                    = previousPartition.getSize()
-                                    - previousUsedSpace;
-                            if (usableSpace > Math.abs(remaining)) {
-                                upgradeVariant = UpgradeVariant.REPARTITION;
-                                return upgradeVariant;
-                            }
-                        }
-                    }
-
-                    // we already found the system partition
-                    // no need to search further
-                    break;
-                }
-                previousPartition = partition;
-            }
-            if (remaining < 0) {
-                noUpgradeReason
-                        = STRINGS.getString("System_Partition_Too_Small");
-                upgradeVariant = UpgradeVariant.IMPOSSIBLE;
-                return upgradeVariant;
+                default:
+                    // unknown partitioning schema
+                    setDestructiveUpgradeVariant();
+                    return upgradeVariant;
             }
         }
+
+        // Even though we already know the system partition we need to loop
+        // here because we also need to know the previous partition to
+        // decide if we can repartition the device.
+        long remaining = -1;
+        Partition previousPartition = null;
+        for (Partition partition : partitions) {
+            if (partition.isSystemPartition()) {
+                long partitionSize = partition.getSize();
+                long saveSystemSize = StorageTools.getEnlargedSystemSize();
+                if (LOGGER.isLoggable(Level.INFO)) {
+                    LOGGER.log(Level.INFO,
+                            "systemSize: {0}, saveSystemSize: {1}, size of {2}: {3}",
+                            new Object[]{
+                                systemSize, saveSystemSize,
+                                partition.getDeviceAndNumber(),
+                                partitionSize
+                            });
+                }
+                remaining = partitionSize - saveSystemSize;
+                LOGGER.log(Level.FINE, "remaining = {0}", remaining);
+                if (remaining >= 0) {
+                    // the new system fits into the current system partition
+                    upgradeVariant = UpgradeVariant.REGULAR;
+                    return upgradeVariant;
+                }
+
+                // The new system is larger than the current system
+                // partition. Check if repartitioning is possible.
+                //
+                // TODO: more sophisticated checks
+                //  - device with partition gaps
+                //  - expand in both directions
+                //  - ...
+                if ((previousPartition != null)
+                        && (!previousPartition.isExtended())) {
+                    // right now we can only resize ext partitions
+                    if (previousPartition.hasExtendedFilesystem()) {
+                        long previousUsedSpace;
+                        if (previousPartition.isPersistencePartition()) {
+                            previousUsedSpace
+                                    = previousPartition.getUsedSpace(true);
+                        } else {
+                            previousUsedSpace
+                                    = previousPartition.getUsedSpace(false);
+                        }
+
+                        long usableSpace
+                                = previousPartition.getSize()
+                                - previousUsedSpace;
+                        if (usableSpace > Math.abs(remaining)) {
+                            upgradeVariant = UpgradeVariant.REPARTITION;
+                            return upgradeVariant;
+                        }
+                    }
+                }
+
+                // we already found the system partition
+                // no need to search further
+                break;
+            }
+            previousPartition = partition;
+        }
+
+        if (remaining < 0) {
+            noUpgradeReason = STRINGS.getString("System_Partition_Too_Small");
+            upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+        }
+
         return upgradeVariant;
     }
 
