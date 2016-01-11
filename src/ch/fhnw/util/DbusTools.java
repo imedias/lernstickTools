@@ -114,29 +114,36 @@ public class DbusTools {
                 deviceObjectPath + device, Device.class);
     }
 
+    /**
+     * Returns a list of all partitions in the system. Partitions are named e.g.
+     * "sda", "sr0", ...
+     * @return a list of partitions in the system
+     */
     public static List<String> getPartitions() {
         // unfortunately, this sucks with dbus, we better parse /proc/partitions
         //
         // the format of the /proc/partitions file looks like this:
         // major minor  #blocks  name
         // 11        0    4097694 sr0        
-        List<String> lines = null;
         try {
-            lines = LernstickFileTools.readFile(new File("/proc/partitions"));
+            List<String> lines = LernstickFileTools.readFile(
+                    new File("/proc/partitions"));
+            Pattern pattern = Pattern.compile("\\p{Space}*\\p{Digit}+"
+                    + "\\p{Space}+\\p{Digit}+\\p{Space}+\\p{Digit}+\\p{Space}+"
+                    + "(\\p{Alnum}+)");
+            List<String> partitions = new ArrayList<>();
+            for (String line : lines) {
+                Matcher matcher = pattern.matcher(line);
+                if (matcher.matches()) {
+                    partitions.add(matcher.group(1));
+                }
+            }
+            Collections.sort(partitions);
+            return partitions;
         } catch (IOException ex) {
             LOGGER.log(Level.SEVERE, "", ex);
         }
-        Pattern pattern = Pattern.compile("\\p{Space}*\\p{Digit}+\\p{Space}+"
-                + "\\p{Digit}+\\p{Space}+\\p{Digit}+\\p{Space}+(\\p{Alnum}+)");
-        List<String> partitions = new ArrayList<>();
-        for (String line : lines) {
-            Matcher matcher = pattern.matcher(line);
-            if (matcher.matches()) {
-                partitions.add(matcher.group(1));
-            }
-        }
-        Collections.sort(partitions);
-        return partitions;
+        return null;
     }
 
     public static byte[] removeNullByte(byte[] input) {
@@ -434,7 +441,7 @@ public class DbusTools {
         // parse xml
         DocumentBuilderFactory documentBuilderFactory
                 = DocumentBuilderFactory.newInstance();
-        
+
         // The standard document builder tries to validate the DTD.
         // If the system is offline (as it is mostly the case in the exam
         // environment), documentBuilder.parse(inputSource) would just fail
@@ -445,7 +452,7 @@ public class DbusTools {
         documentBuilderFactory.setFeature(
                 "http://apache.org/xml/features/nonvalidating/load-external-dtd",
                 false);
-        
+
         DocumentBuilder documentBuilder
                 = documentBuilderFactory.newDocumentBuilder();
         InputSource inputSource = new InputSource(new StringReader(xml));
