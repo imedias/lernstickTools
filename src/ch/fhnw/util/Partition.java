@@ -24,9 +24,9 @@ import org.xml.sax.SAXException;
 public class Partition {
 
     /**
-     * the label used for boot partitions
+     * the label used for efi partitions
      */
-    public final static String BOOT_LABEL = "boot";
+    public final static String EFI_LABEL = "EFI";
     /**
      * the label used for persistence partitions
      */
@@ -563,19 +563,19 @@ public class Partition {
     }
 
     /**
-     * returns <code>true</code>, if this partition is a Lernstick boot
+     * returns <code>true</code>, if this partition is a Lernstick efi
      * partition, <code>false</code> otherwise
      *
-     * @return <code>true</code>, if this partition is a Lernstick boot
+     * @return <code>true</code>, if this partition is a Lernstick efi
      * partition, <code>false</code> otherwise
      * @throws DBusException if a dbus exception occurs
      */
-    public boolean isBootPartition() throws DBusException {
+    public boolean isEfiPartition() throws DBusException {
         if (isBootPartition == null) {
             isBootPartition = false;
             LOGGER.log(Level.FINEST, "checking partition {0}", deviceAndNumber);
             LOGGER.log(Level.FINEST, "partition label: \"{0}\"", idLabel);
-            if (BOOT_LABEL.equals(idLabel)) {
+            if (EFI_LABEL.equals(idLabel)) {
                 isBootPartition = true;
             } else {
                 LOGGER.finest("does not match system partition label");

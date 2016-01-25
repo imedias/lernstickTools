@@ -95,7 +95,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
     private String noUpgradeReason;
     private Partition exchangePartition;
     private Partition dataPartition;
-    private Partition bootPartition;
+    private Partition efiPartition;
     private Partition systemPartition;
 
     /**
@@ -419,13 +419,13 @@ public class StorageDevice implements Comparable<StorageDevice> {
         }
 
         // check partitioning schema
-        if (bootPartition == null) {
-            // old partitioning schema without any boot partition
+        if (efiPartition == null) {
+            // old partitioning schema without any efi partition
             setDestructiveUpgradeVariant();
             return upgradeVariant;
 
         } else {
-            switch (bootPartition.getNumber()) {
+            switch (efiPartition.getNumber()) {
                 case 1:
                     // fine, current partitioning schema
                     break;
@@ -530,13 +530,13 @@ public class StorageDevice implements Comparable<StorageDevice> {
     }
 
     /**
-     * returns the system partition of this storage device
+     * returns the EFI partition of this storage device
      *
-     * @return the system partition of this storage device
+     * @return the EFI partition of this storage device
      */
-    public synchronized Partition getBootPartition() {
+    public synchronized Partition getEfiPartition() {
         getPartitions();
-        return bootPartition;
+        return efiPartition;
     }
 
     /**
@@ -581,12 +581,12 @@ public class StorageDevice implements Comparable<StorageDevice> {
                     device, numberString, systemSize);
             if (partition.isPersistencePartition()) {
                 dataPartition = partition;
-            } else if (partition.isBootPartition()) {
+            } else if (partition.isEfiPartition()) {
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                // ! put the boot partition check before the exchange    !
+                // ! put the EFI partition check before the exchange    !
                 // ! partition check because it is the more specific one !
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                bootPartition = partition;
+                efiPartition = partition;
             } else if (partition.isExchangePartition()) {
                 exchangePartition = partition;
             } else if (partition.isSystemPartition()) {
