@@ -11,7 +11,6 @@ import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.xml.parsers.ParserConfigurationException;
-import org.freedesktop.dbus.Path;
 import org.freedesktop.dbus.exceptions.DBusException;
 import org.xml.sax.SAXException;
 
@@ -82,11 +81,13 @@ public class StorageDevice implements Comparable<StorageDevice> {
             = ResourceBundle.getBundle("ch/fhnw/util/Strings");
     private final String device;
     private final long systemSize;
-    private boolean systemInternal;
     private String vendor;
     private String model;
     private String revision;
     private String serial;
+    private boolean raid;
+    private String raidLevel;
+    private int raidDeviceCount;
     private boolean removable;
     private long size;
     private final Type type;
@@ -124,6 +125,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
             LOGGER.log(Level.WARNING, "", ex);
         }
 
+        boolean systemInternal = false;
+
         if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
             vendor = DbusTools.getStringProperty(device, "DriveVendor");
             model = DbusTools.getStringProperty(device, "DriveModel");
@@ -149,24 +152,38 @@ public class StorageDevice implements Comparable<StorageDevice> {
                             device, blockInterfaceName, "HintSystem");
 
                     // query drive specific properties
-                    Path driveObjectPath = DbusTools.getDevicePathProperty(
-                            device, blockInterfaceName, "Drive");
-                    String objectPath = driveObjectPath.toString();
-                    String driveInterface = "org.freedesktop.UDisks2.Drive";
-                    vendor = DbusTools.getStringProperty(
-                            objectPath, driveInterface, "Vendor");
-                    model = DbusTools.getStringProperty(
-                            objectPath, driveInterface, "Model");
-                    revision = DbusTools.getStringProperty(
-                            objectPath, driveInterface, "Revision");
-                    serial = DbusTools.getStringProperty(
-                            objectPath, driveInterface, "Serial");
-                    size = DbusTools.getLongProperty(
-                            objectPath, driveInterface, "Size");
-                    connectionInterface = DbusTools.getStringProperty(
-                            objectPath, driveInterface, "ConnectionBus");
-                    isOpticalDisc = DbusTools.getBooleanProperty(
-                            objectPath, driveInterface, "Optical");
+                    String driveObjectPath = DbusTools.getDevicePathProperty(
+                            device, blockInterfaceName, "Drive").toString();
+                    if (driveObjectPath.equals("/")) {
+                        // raid device
+                        raid = true;
+                        String raidObjectPath = DbusTools.getDevicePathProperty(
+                                device, blockInterfaceName, "MDRaid").toString();
+                        String raidInterface = "org.freedesktop.UDisks2.MDRaid";
+                        raidLevel = DbusTools.getStringProperty(
+                                raidObjectPath, raidInterface, "Level");
+                        raidDeviceCount = DbusTools.getIntProperty(
+                                raidObjectPath, raidInterface, "NumDevices");
+                        size = DbusTools.getLongProperty(
+                                driveObjectPath, raidObjectPath, "Size");
+                    } else {
+                        // non-raid device
+                        String driveInterface = "org.freedesktop.UDisks2.Drive";
+                        vendor = DbusTools.getStringProperty(
+                                driveObjectPath, driveInterface, "Vendor");
+                        model = DbusTools.getStringProperty(
+                                driveObjectPath, driveInterface, "Model");
+                        revision = DbusTools.getStringProperty(
+                                driveObjectPath, driveInterface, "Revision");
+                        serial = DbusTools.getStringProperty(
+                                driveObjectPath, driveInterface, "Serial");
+                        size = DbusTools.getLongProperty(
+                                driveObjectPath, driveInterface, "Size");
+                        connectionInterface = DbusTools.getStringProperty(
+                                driveObjectPath, driveInterface, "ConnectionBus");
+                        isOpticalDisc = DbusTools.getBooleanProperty(
+                                driveObjectPath, driveInterface, "Optical");
+                    }
                 }
             } catch (SAXException | IOException |
                     ParserConfigurationException ex) {
@@ -177,17 +194,13 @@ public class StorageDevice implements Comparable<StorageDevice> {
         // little stupid heuristic to determine storage device type
         if (isOpticalDisc) {
             type = Type.OpticalDisc;
+        } else if (device.startsWith("mmcblk")) {
+            type = Type.SDMemoryCard;
+        } else if ((systemInternal == false)
+                && "usb".equals(connectionInterface)) {
+            type = Type.USBFlashDrive;
         } else {
-            if (device.startsWith("mmcblk")) {
-                type = Type.SDMemoryCard;
-            } else {
-                if ((systemInternal == false)
-                        && "usb".equals(connectionInterface)) {
-                    type = Type.USBFlashDrive;
-                } else {
-                    type = Type.HardDrive;
-                }
-            }
+            type = Type.HardDrive;
         }
     }
 
@@ -316,6 +329,35 @@ public class StorageDevice implements Comparable<StorageDevice> {
      */
     public boolean isRemovable() {
         return removable;
+    }
+
+    /**
+     * returns <code>true</code>, if this device is a RAID, <code>false</code>
+     * otherwise
+     *
+     * @return <code>true</code>, if this device is a RAID, <code>false</code>
+     * otherwise
+     */
+    public boolean isRaid() {
+        return raid;
+    }
+
+    /**
+     * returns the RAID level or <code>null</code>, if this is no RAID
+     *
+     * @return the RAID level or <code>null</code>, if this is no RAID
+     */
+    public String getRaidLevel() {
+        return raidLevel;
+    }
+
+    /**
+     * returns the number of devices in this RAID
+     *
+     * @return the number of devices in this RAID
+     */
+    public int getRaidDeviceCount() {
+        return raidDeviceCount;
     }
 
     /**

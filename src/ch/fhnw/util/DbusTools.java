@@ -16,6 +16,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import org.freedesktop.DBus;
 import org.freedesktop.dbus.DBusConnection;
 import org.freedesktop.dbus.Path;
+import org.freedesktop.dbus.UInt32;
 import org.freedesktop.dbus.UInt64;
 import org.freedesktop.dbus.exceptions.DBusException;
 import org.freedesktop.dbus.exceptions.DBusExecutionException;
@@ -34,16 +35,30 @@ import org.xml.sax.SAXException;
  */
 public class DbusTools {
 
+    /**
+     * the different known and supported D-Bus versions
+     */
     public enum DbusVersion {
 
-        V1, V2
+        /**
+         * version 1
+         */
+        V1,
+        /**
+         * version 2
+         */
+        V2
     };
+
+    /**
+     * the detected D-Bus version
+     */
     public static final DbusVersion DBUS_VERSION;
     private static final Logger LOGGER
             = Logger.getLogger(DbusTools.class.getName());
     private static DBusConnection dbusSystemConnection;
-    private static final String busName;
-    private static final String deviceObjectPath;
+    private static final String BUS_NAME;
+    private static final String DEVICE_OBJECT_PATH;
 
     static {
         boolean v1found = false;
@@ -89,16 +104,16 @@ public class DbusTools {
 
         if (v1found) {
             DBUS_VERSION = DbusVersion.V1;
-            busName = "org.freedesktop.UDisks";
-            deviceObjectPath = "/org/freedesktop/UDisks/devices/";
+            BUS_NAME = "org.freedesktop.UDisks";
+            DEVICE_OBJECT_PATH = "/org/freedesktop/UDisks/devices/";
         } else if (v2found) {
             DBUS_VERSION = DbusVersion.V2;
-            busName = "org.freedesktop.UDisks2";
-            deviceObjectPath = "/org/freedesktop/UDisks2/block_devices/";
+            BUS_NAME = "org.freedesktop.UDisks2";
+            DEVICE_OBJECT_PATH = "/org/freedesktop/UDisks2/block_devices/";
         } else {
             DBUS_VERSION = null;
-            busName = null;
-            deviceObjectPath = null;
+            BUS_NAME = null;
+            DEVICE_OBJECT_PATH = null;
         }
     }
 
@@ -110,13 +125,14 @@ public class DbusTools {
      * @throws DBusException if a d-bus exception occurs
      */
     public static Device getDevice(String device) throws DBusException {
-        return dbusSystemConnection.getRemoteObject(busName,
-                deviceObjectPath + device, Device.class);
+        return dbusSystemConnection.getRemoteObject(BUS_NAME,
+                DEVICE_OBJECT_PATH + device, Device.class);
     }
 
     /**
      * Returns a list of all partitions in the system. Partitions are named e.g.
      * "sda", "sr0", ...
+     *
      * @return a list of partitions in the system
      */
     public static List<String> getPartitions() {
@@ -146,14 +162,29 @@ public class DbusTools {
         return null;
     }
 
+    /**
+     * removes the last byte of an array
+     *
+     * @param input an array
+     * @return the shortened array
+     */
     public static byte[] removeNullByte(byte[] input) {
         byte[] output = new byte[input.length - 1];
         System.arraycopy(input, 0, output, 0, output.length);
         return output;
     }
 
+    /**
+     * returns <code>true</code>, if the given device is a partition,
+     * <code>false</code> otherwise
+     *
+     * @param device the given device
+     * @return <code>true</code>, if the given device is a partition,
+     * <code>false</code> otherwise
+     * @throws DBusException
+     */
     public static boolean isPartition(String device) throws DBusException {
-        String dbusPath = deviceObjectPath + device;
+        String dbusPath = DEVICE_OBJECT_PATH + device;
         LOGGER.log(Level.INFO, "dbusPath = \"{0}\"", dbusPath);
         try {
             List<String> interfaceNames = getInterfaceNames(dbusPath);
@@ -179,12 +210,12 @@ public class DbusTools {
      */
     public static String getStringProperty(String device, String property)
             throws DBusException {
-        String dbusPath = deviceObjectPath + device;
+        String dbusPath = DEVICE_OBJECT_PATH + device;
         LOGGER.log(Level.INFO, "dbusPath = \"{0}\", property = \"{1}\"",
                 new Object[]{dbusPath, property});
         DBus.Properties deviceProperties = dbusSystemConnection.getRemoteObject(
-                busName, dbusPath, DBus.Properties.class);
-        return deviceProperties.Get(busName, property);
+                BUS_NAME, dbusPath, DBus.Properties.class);
+        return deviceProperties.Get(BUS_NAME, property);
     }
 
     /**
@@ -198,7 +229,7 @@ public class DbusTools {
      */
     public static String getDeviceStringProperty(String device,
             String interfaceName, String property) throws DBusException {
-        String objectPath = deviceObjectPath + device;
+        String objectPath = DEVICE_OBJECT_PATH + device;
         return getStringProperty(objectPath, interfaceName, property);
     }
 
@@ -217,7 +248,7 @@ public class DbusTools {
                 + "property = \"{2}\"",
                 new Object[]{objectPath, interfaceName, property});
         DBus.Properties stringProperty = dbusSystemConnection.getRemoteObject(
-                busName, objectPath, DBus.Properties.class);
+                BUS_NAME, objectPath, DBus.Properties.class);
         return stringProperty.Get(interfaceName, property);
     }
 
@@ -236,7 +267,7 @@ public class DbusTools {
                 + "property = \"{2}\"",
                 new Object[]{objectPath, interfaceName, property});
         DBus.Properties stringProperty = dbusSystemConnection.getRemoteObject(
-                busName, objectPath, DBus.Properties.class);
+                BUS_NAME, objectPath, DBus.Properties.class);
         return stringProperty.Get(interfaceName, property);
     }
 
@@ -254,13 +285,8 @@ public class DbusTools {
         LOGGER.log(Level.INFO, "objectPath = \"{0}\", interfaceName = \"{1}\", "
                 + "property = \"{2}\"",
                 new Object[]{objectPath, interfaceName, property});
-        DBus.Properties stringProperty = null;
-        try {
-            stringProperty = dbusSystemConnection.getRemoteObject(
-                    busName, objectPath, DBus.Properties.class);
-        } catch (DBusException dBusException) {
-            LOGGER.log(Level.WARNING, "", dBusException);
-        }
+        DBus.Properties stringProperty = dbusSystemConnection.getRemoteObject(
+                BUS_NAME, objectPath, DBus.Properties.class);
         return stringProperty.Get(interfaceName, property);
     }
 
@@ -275,7 +301,7 @@ public class DbusTools {
      */
     public static Path getDevicePathProperty(String device,
             String interfaceName, String property) throws DBusException {
-        String objectPath = deviceObjectPath + device;
+        String objectPath = DEVICE_OBJECT_PATH + device;
         return getPathProperty(objectPath, interfaceName, property);
     }
 
@@ -294,7 +320,7 @@ public class DbusTools {
                 + "property = \"{2}\"",
                 new Object[]{objectPath, interfaceName, property});
         DBus.Properties stringProperty = dbusSystemConnection.getRemoteObject(
-                busName, objectPath, DBus.Properties.class);
+                BUS_NAME, objectPath, DBus.Properties.class);
         return stringProperty.Get(interfaceName, property);
     }
 
@@ -308,12 +334,12 @@ public class DbusTools {
      */
     public static List<String> getStringListProperty(String device,
             String property) throws DBusException {
-        String dbusPath = deviceObjectPath + device;
+        String dbusPath = DEVICE_OBJECT_PATH + device;
         LOGGER.log(Level.INFO, "dbusPath = \"{0}\", property = \"{1}\"",
                 new Object[]{dbusPath, property});
         DBus.Properties deviceProperties = dbusSystemConnection.getRemoteObject(
-                busName, dbusPath, DBus.Properties.class);
-        return deviceProperties.Get(busName, property);
+                BUS_NAME, dbusPath, DBus.Properties.class);
+        return deviceProperties.Get(BUS_NAME, property);
     }
 
     /**
@@ -326,12 +352,12 @@ public class DbusTools {
      */
     public static long getLongProperty(String device, String property)
             throws DBusException {
-        String dbusPath = deviceObjectPath + device;
+        String dbusPath = DEVICE_OBJECT_PATH + device;
         LOGGER.log(Level.INFO, "dbusPath = \"{0}\", property = \"{1}\"",
                 new Object[]{dbusPath, property});
         DBus.Properties deviceProperties = dbusSystemConnection.getRemoteObject(
-                busName, dbusPath, DBus.Properties.class);
-        UInt64 value = deviceProperties.Get(busName, property);
+                BUS_NAME, dbusPath, DBus.Properties.class);
+        UInt64 value = deviceProperties.Get(BUS_NAME, property);
         return value.longValue();
     }
 
@@ -346,12 +372,32 @@ public class DbusTools {
      */
     public static long getDeviceLongProperty(String device,
             String interfaceName, String property) throws DBusException {
-        String objectPath = deviceObjectPath + device;
+        String objectPath = DEVICE_OBJECT_PATH + device;
         return getLongProperty(objectPath, interfaceName, property);
     }
 
     /**
-     * returns a property of a partition device as a long value
+     * returns a property as an int value
+     *
+     * @param objectPath the object to query
+     * @param interfaceName the interface to query
+     * @param property the property to query
+     * @return a property of a partition device as a long value
+     * @throws DBusException if a d-bus exception occurs
+     */
+    public static int getIntProperty(String objectPath,
+            String interfaceName, String property) throws DBusException {
+        LOGGER.log(Level.INFO, "objectPath = \"{0}\", interfaceName = \"{1}\", "
+                + "property = \"{2}\"",
+                new Object[]{objectPath, interfaceName, property});
+        DBus.Properties properties = dbusSystemConnection.getRemoteObject(
+                BUS_NAME, objectPath, DBus.Properties.class);
+        UInt32 value = properties.Get(interfaceName, property);
+        return value.intValue();
+    }
+
+    /**
+     * returns a property as a long value
      *
      * @param objectPath the object to query
      * @param interfaceName the interface to query
@@ -365,7 +411,7 @@ public class DbusTools {
                 + "property = \"{2}\"",
                 new Object[]{objectPath, interfaceName, property});
         DBus.Properties properties = dbusSystemConnection.getRemoteObject(
-                busName, objectPath, DBus.Properties.class);
+                BUS_NAME, objectPath, DBus.Properties.class);
         UInt64 value = properties.Get(interfaceName, property);
         return value.longValue();
     }
@@ -380,12 +426,12 @@ public class DbusTools {
      */
     public static Boolean getBooleanProperty(String device, String property)
             throws DBusException {
-        String dbusPath = deviceObjectPath + device;
+        String dbusPath = DEVICE_OBJECT_PATH + device;
         LOGGER.log(Level.INFO, "dbusPath = \"{0}\", property = \"{1}\"",
                 new Object[]{dbusPath, property});
         DBus.Properties deviceProperties = dbusSystemConnection.getRemoteObject(
-                busName, dbusPath, DBus.Properties.class);
-        return deviceProperties.Get(busName, property);
+                BUS_NAME, dbusPath, DBus.Properties.class);
+        return deviceProperties.Get(BUS_NAME, property);
     }
 
     /**
@@ -399,7 +445,7 @@ public class DbusTools {
      */
     public static Boolean getDeviceBooleanProperty(String device,
             String interfaceName, String property) throws DBusException {
-        String objectPath = deviceObjectPath + device;
+        String objectPath = DEVICE_OBJECT_PATH + device;
         return getBooleanProperty(objectPath, interfaceName, property);
     }
 
@@ -418,16 +464,36 @@ public class DbusTools {
                 + "property = \"{2}\"",
                 new Object[]{objectPath, interfaceName, property});
         DBus.Properties stringProperty = dbusSystemConnection.getRemoteObject(
-                busName, objectPath, DBus.Properties.class);
+                BUS_NAME, objectPath, DBus.Properties.class);
         return stringProperty.Get(interfaceName, property);
     }
 
+    /**
+     * returns the interface names of a given device
+     *
+     * @param device the given device
+     * @return the interface names of a given device
+     * @throws DBusException
+     * @throws SAXException
+     * @throws IOException
+     * @throws ParserConfigurationException
+     */
     public static List<String> getDeviceInterfaceNames(String device)
             throws DBusException, SAXException, IOException,
             ParserConfigurationException {
-        return getInterfaceNames(deviceObjectPath + device);
+        return getInterfaceNames(DEVICE_OBJECT_PATH + device);
     }
 
+    /**
+     * returns the interface names of a given object path
+     *
+     * @param objectPath the given object path
+     * @return the interface names of a given object path
+     * @throws DBusException
+     * @throws SAXException
+     * @throws IOException
+     * @throws ParserConfigurationException
+     */
     public static List<String> getInterfaceNames(String objectPath)
             throws DBusException, SAXException, IOException,
             ParserConfigurationException {
@@ -435,7 +501,7 @@ public class DbusTools {
         // introspect object path via dbus
         DBus.Introspectable introspectable
                 = (DBus.Introspectable) dbusSystemConnection.getRemoteObject(
-                        busName, objectPath, DBus.Introspectable.class);
+                        BUS_NAME, objectPath, DBus.Introspectable.class);
         String xml = introspectable.Introspect();
 
         // parse xml
