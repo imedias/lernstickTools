@@ -249,7 +249,9 @@ public class DbusTools {
                 new Object[]{objectPath, interfaceName, property});
         DBus.Properties stringProperty = dbusSystemConnection.getRemoteObject(
                 BUS_NAME, objectPath, DBus.Properties.class);
-        return stringProperty.Get(interfaceName, property);
+        String returnValue = stringProperty.Get(interfaceName, property);
+        LOGGER.log(Level.INFO, "stringProperty = \"{0}\"", returnValue);
+        return returnValue;
     }
 
     /**
@@ -393,7 +395,9 @@ public class DbusTools {
         DBus.Properties properties = dbusSystemConnection.getRemoteObject(
                 BUS_NAME, objectPath, DBus.Properties.class);
         UInt32 value = properties.Get(interfaceName, property);
-        return value.intValue();
+        int returnValue = value.intValue();
+        LOGGER.log(Level.INFO, "intProperty = \"{0}\"", returnValue);
+        return returnValue;
     }
 
     /**
