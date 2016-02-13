@@ -165,7 +165,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
                         raidDeviceCount = DbusTools.getIntProperty(
                                 raidObjectPath, raidInterface, "NumDevices");
                         size = DbusTools.getLongProperty(
-                                driveObjectPath, raidObjectPath, "Size");
+                                raidObjectPath, raidInterface, "Size");
                     } else {
                         // non-raid device
                         String driveInterface = "org.freedesktop.UDisks2.Drive";
