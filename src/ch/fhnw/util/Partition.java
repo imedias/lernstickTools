@@ -31,12 +31,15 @@ public class Partition {
      * the label used for persistence partitions
      */
     public final static String PERSISTENCE_LABEL = "persistence";
-    private final static String[] LEGACY_PERSISTENCE_LABELs = new String[]{
+    private final static String[] LEGACY_PERSISTENCE_LABELS = new String[]{
         "live-rw"
+    };
+    private final static String[] LEGACY_EFI_LABELS = new String[]{
+        "boot"
     };
     private final static Logger LOGGER
             = Logger.getLogger(Partition.class.getName());
-    private final static Pattern deviceAndNumberPattern
+    private final static Pattern DEVICE_AND_NUMBER_PATTERN
             = Pattern.compile("(.*)(\\d+)");
     private final String device;
     private final int number;
@@ -65,7 +68,7 @@ public class Partition {
     public static Partition getPartitionFromDeviceAndNumber(
             String deviceAndNumber, long systemSize) throws DBusException {
         LOGGER.log(Level.FINE, "deviceAndNumber: \"{0}\"", deviceAndNumber);
-        Matcher matcher = deviceAndNumberPattern.matcher(deviceAndNumber);
+        Matcher matcher = DEVICE_AND_NUMBER_PATTERN.matcher(deviceAndNumber);
         if (matcher.matches()) {
             return getPartitionFromDevice(
                     matcher.group(1), matcher.group(2), systemSize);
@@ -107,72 +110,38 @@ public class Partition {
      * @return a String representation of the partition number
      * @throws DBusException if getting the partition properties via dbus fails
      */
-    public static Partition getPartitionFromDevice(
-            String device, String numberString, long systemSize)
-            throws DBusException {
+    public static Partition getPartitionFromDevice(String device,
+            String numberString, long systemSize) throws DBusException {
+
         LOGGER.log(Level.FINE, "device: \"{0}\", numberString: \"{1}\"",
                 new Object[]{device, numberString});
-        if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+
+        // for newer D-BUS versions we have to check, if this device is a
+        // partiton at all
+        if ((DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1)
+                || (DbusTools.isPartition(device + numberString))) {
             return new Partition(
                     device, Integer.parseInt(numberString), systemSize);
         } else {
-            // check, if this device is a partiton at all
-            if (DbusTools.isPartition(device + numberString)) {
-                return new Partition(
-                        device, Integer.parseInt(numberString), systemSize);
-            } else {
-                return null;
-            }
+            return null;
         }
     }
 
-    private Partition(String device, int number, long systemSize)
-            throws DBusException {
-
-        LOGGER.log(Level.FINE, "device: \"{0}\", number = {1}",
-                new Object[]{device, number});
-        this.device = device;
-        this.number = number;
-        this.systemSize = systemSize;
-        deviceAndNumber = device + number;
-
-        if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
-            offset = DbusTools.getLongProperty(deviceAndNumber, "PartitionOffset");
-            size = DbusTools.getLongProperty(deviceAndNumber, "PartitionSize");
-            idLabel = DbusTools.getStringProperty(deviceAndNumber, "IdLabel");
-            idType = DbusTools.getStringProperty(deviceAndNumber, "IdType");
-            type = DbusTools.getStringProperty(deviceAndNumber, "PartitionType");
-            isDrive = DbusTools.getBooleanProperty(deviceAndNumber, "DeviceIsDrive");
-
-        } else {
-            String objectPath = "/org/freedesktop/UDisks2/block_devices/"
-                    + deviceAndNumber;
-            String interfacePrefix = "org.freedesktop.UDisks2.";
-            String partitionInterface = interfacePrefix + "Partition";
-            offset = DbusTools.getLongProperty(
-                    objectPath, partitionInterface, "Offset");
-            size = DbusTools.getLongProperty(
-                    objectPath, partitionInterface, "Size");
-            type = DbusTools.getStringProperty(
-                    objectPath, partitionInterface, "Type");
-
-            String blockInterface = interfacePrefix + "Block";
-            idLabel = DbusTools.getStringProperty(
-                    objectPath, blockInterface, "IdLabel");
-            idType = DbusTools.getStringProperty(
-                    objectPath, blockInterface, "IdType");
-
-            boolean tmpDrive = false;
-            try {
-                List<String> interfaceNames
-                        = DbusTools.getInterfaceNames(objectPath);
-                tmpDrive = !interfaceNames.contains(
-                        interfacePrefix + "Partition");
-            } catch (IOException | SAXException |
-                    ParserConfigurationException ex) {
-                LOGGER.log(Level.SEVERE, "", ex);
-            }
-            isDrive = tmpDrive;
+    /**
+     * sets the boot flag on the partition (via parted)
+     *
+     * @param enabled
+     * @throws DBusException if a D-BUS exception occurs
+     * @throws java.io.IOException if running parted failed
+     */
+    public void setBootFlag(boolean enabled) throws DBusException, IOException {
+        ProcessExecutor processExecutor = new ProcessExecutor();
+        int returnValue = processExecutor.executeProcess(true, true, "parted",
+                "/dev/" + getStorageDevice().getDevice(), "set",
+                String.valueOf(getNumber()), "boot", enabled ? "on" : "off");
+        if (returnValue != 0) {
+            throw new IOException("could not change boot flag on partition "
+                    + toString());
         }
     }
 
@@ -203,6 +172,14 @@ public class Partition {
         return stringBuilder.toString();
     }
 
+    /**
+     * makes sure that the parititon is mounted and then executes an Action
+     *
+     * @param <T> the return type of the execution
+     * @param action the action to execute
+     * @return the return value of the action
+     * @throws DBusException if a D-BUS exception occurs
+     */
     public <T> T executeMounted(Action<T> action)
             throws DBusException {
 
@@ -223,8 +200,19 @@ public class Partition {
         return t;
     }
 
+    /**
+     * a generic action that can be executed when the partition is mounted
+     *
+     * @param <T> the return type of the execute function
+     */
     public static abstract class Action<T> {
 
+        /**
+         * executed this action
+         *
+         * @param mountPath the path where the partition is mounted
+         * @return the return value
+         */
         public abstract T execute(File mountPath);
     }
 
@@ -563,12 +551,12 @@ public class Partition {
     }
 
     /**
-     * returns <code>true</code>, if this partition is a Lernstick efi
+     * returns <code>true</code>, if this partition is a Lernstick EFI
      * partition, <code>false</code> otherwise
      *
-     * @return <code>true</code>, if this partition is a Lernstick efi
+     * @return <code>true</code>, if this partition is a Lernstick EFI
      * partition, <code>false</code> otherwise
-     * @throws DBusException if a dbus exception occurs
+     * @throws DBusException if a D-BUS exception occurs
      */
     public boolean isEfiPartition() throws DBusException {
         if (isBootPartition == null) {
@@ -578,7 +566,17 @@ public class Partition {
             if (EFI_LABEL.equals(idLabel)) {
                 isBootPartition = true;
             } else {
-                LOGGER.finest("does not match system partition label");
+                for (String legacyEfiLabel : LEGACY_EFI_LABELS) {
+                    if (legacyEfiLabel.equals(idLabel)) {
+                        isBootPartition = true;
+                        break;
+                    }
+                }
+            }
+            if (isBootPartition) {
+                LOGGER.finest("matches efi/boot partition label");
+            } else {
+                LOGGER.finest("does *NOT* match efi/boot partition label");
             }
         }
         return isBootPartition;
@@ -641,7 +639,7 @@ public class Partition {
         if (idLabel.equals(PERSISTENCE_LABEL)) {
             return true;
         }
-        for (String legacyLabel : LEGACY_PERSISTENCE_LABELs) {
+        for (String legacyLabel : LEGACY_PERSISTENCE_LABELS) {
             if (idLabel.equals(legacyLabel)) {
                 return true;
             }
@@ -713,6 +711,56 @@ public class Partition {
     public boolean isMounted() throws DBusException {
         List<String> mountPaths = getMountPaths();
         return (mountPaths != null) && (!mountPaths.isEmpty());
+    }
+
+    private Partition(String device, int number, long systemSize)
+            throws DBusException {
+
+        LOGGER.log(Level.FINE, "device: \"{0}\", number = {1}",
+                new Object[]{device, number});
+        this.device = device;
+        this.number = number;
+        this.systemSize = systemSize;
+        deviceAndNumber = device + number;
+
+        if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+            offset = DbusTools.getLongProperty(deviceAndNumber, "PartitionOffset");
+            size = DbusTools.getLongProperty(deviceAndNumber, "PartitionSize");
+            idLabel = DbusTools.getStringProperty(deviceAndNumber, "IdLabel");
+            idType = DbusTools.getStringProperty(deviceAndNumber, "IdType");
+            type = DbusTools.getStringProperty(deviceAndNumber, "PartitionType");
+            isDrive = DbusTools.getBooleanProperty(deviceAndNumber, "DeviceIsDrive");
+
+        } else {
+            String objectPath = "/org/freedesktop/UDisks2/block_devices/"
+                    + deviceAndNumber;
+            String interfacePrefix = "org.freedesktop.UDisks2.";
+            String partitionInterface = interfacePrefix + "Partition";
+            offset = DbusTools.getLongProperty(
+                    objectPath, partitionInterface, "Offset");
+            size = DbusTools.getLongProperty(
+                    objectPath, partitionInterface, "Size");
+            type = DbusTools.getStringProperty(
+                    objectPath, partitionInterface, "Type");
+
+            String blockInterface = interfacePrefix + "Block";
+            idLabel = DbusTools.getStringProperty(
+                    objectPath, blockInterface, "IdLabel");
+            idType = DbusTools.getStringProperty(
+                    objectPath, blockInterface, "IdType");
+
+            boolean tmpDrive = false;
+            try {
+                List<String> interfaceNames
+                        = DbusTools.getInterfaceNames(objectPath);
+                tmpDrive = !interfaceNames.contains(
+                        interfacePrefix + "Partition");
+            } catch (IOException | SAXException |
+                    ParserConfigurationException ex) {
+                LOGGER.log(Level.SEVERE, "", ex);
+            }
+            isDrive = tmpDrive;
+        }
     }
 
     private void handleUmountException(Exception ex) {
