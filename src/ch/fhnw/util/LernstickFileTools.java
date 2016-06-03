@@ -2,6 +2,7 @@ package ch.fhnw.util;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FilenameFilter;
 import java.io.IOException;
@@ -18,6 +19,8 @@ import java.util.ResourceBundle;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * some file tools
@@ -49,6 +52,65 @@ public class LernstickFileTools {
             }
         }
         return lines;
+    }
+    /**
+     * replaces a text in a file
+     *
+     * @param fileName the path to the file
+     * @param pattern the pattern to search for
+     * @param replacement the replacemtent text to set
+     * @throws IOException
+     */
+    public static void replaceText(String fileName, Pattern pattern,
+            String replacement) throws IOException {
+        File file = new File(fileName);
+        if (file.exists()) {
+            if (LOGGER.isLoggable(Level.INFO)) {
+                LOGGER.log(Level.INFO,
+                        "replacing pattern \"{0}\" with \"{1}\" in file \"{2}\"",
+                        new Object[]{pattern.pattern(), replacement, fileName});
+            }
+            List<String> lines = LernstickFileTools.readFile(file);
+            boolean changed = false;
+            for (int i = 0, size = lines.size(); i < size; i++) {
+                String line = lines.get(i);
+                Matcher matcher = pattern.matcher(line);
+                if (matcher.find()) {
+                    LOGGER.log(Level.INFO, "line \"{0}\" matches", line);
+                    lines.set(i, matcher.replaceAll(replacement));
+                    changed = true;
+                } else {
+                    LOGGER.log(Level.INFO, "line \"{0}\" does NOT match", line);
+                }
+            }
+            if (changed) {
+                writeFile(file, lines);
+            }
+        } else {
+            LOGGER.log(Level.WARNING, "file \"{0}\" does not exist!", fileName);
+        }
+    }
+
+    /**
+     * writes lines of text into a file
+     *
+     * @param file the file to write into
+     * @param lines the lines to write
+     * @throws IOException
+     */
+    public static void writeFile(File file, List<String> lines)
+            throws IOException {
+        // delete old version of file
+        if (file.exists()) {
+            file.delete();
+        }
+        try (FileOutputStream outputStream = new FileOutputStream(file)) {
+            String lineSeparator = System.getProperty("line.separator");
+            for (String line : lines) {
+                outputStream.write((line + lineSeparator).getBytes());
+            }
+            outputStream.flush();
+        }
     }
 
     /**
