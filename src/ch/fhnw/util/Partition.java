@@ -44,6 +44,7 @@ public class Partition {
     private final String device;
     private final int number;
     private final String deviceAndNumber;
+    private final String objectId;
     private final long offset;
     private final long size;
     private final String type;
@@ -51,6 +52,7 @@ public class Partition {
     private final String idType;
     private final long systemSize;
     private final boolean isDrive;
+    private final boolean isLuks;
     private Boolean isBootPartition;
     private Boolean isSystemPartition;
     private Long usedSpace;
@@ -121,7 +123,8 @@ public class Partition {
         if ((DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1)
                 || (DbusTools.isPartition(device + numberString))) {
             return new Partition(
-                    device, Integer.parseInt(numberString), systemSize);
+                    device, Integer.parseInt(numberString), systemSize,
+                        LuksUtil.isLuks("/dev/" + device + numberString));
         } else {
             return null;
         }
@@ -308,7 +311,7 @@ public class Partition {
 
         } else {
             String objectPath = "/org/freedesktop/UDisks2/block_devices/"
-                    + deviceAndNumber;
+                    + objectId;
             List<List> mountPaths = DbusTools.getListListProperty(
                     objectPath, "org.freedesktop.UDisks2.Filesystem",
                     "MountPoints");
@@ -442,7 +445,7 @@ public class Partition {
             List<String> mountPaths = getMountPaths();
             if (mountPaths.isEmpty()) {
                 if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
-                    Device udisksDevice = DbusTools.getDevice(deviceAndNumber);
+                    Device udisksDevice = DbusTools.getDevice(objectId);
                     mountPath = udisksDevice.FilesystemMount(
                             "auto", Arrays.asList(options));
                 } else {
@@ -455,12 +458,12 @@ public class Partition {
                     ProcessExecutor processExecutor = new ProcessExecutor();
                     int returnValue = processExecutor.executeProcess(
                             true, true, "udisksctl", "mount", "-b",
-                            "/dev/" + deviceAndNumber);
+                            (isLuks ? "/dev/mapper/" : "/dev/") + deviceAndNumber);
                     if (returnValue == 0) {
                         String output = processExecutor.getStdOutList().get(0);
                         LOGGER.log(Level.FINE, "output: \"{0}\"", output);
                         Pattern pattern = Pattern.compile(
-                                "Mounted /dev/\\p{Alnum}+ at (.*).");
+                                "Mounted /dev/\\p{Print}+ at (.*).");
                         Matcher matcher = pattern.matcher(output);
                         if (matcher.matches()) {
                             mountPath = matcher.group(1);
@@ -514,7 +517,7 @@ public class Partition {
                         new Object[]{deviceAndNumber, mountPaths.get(0)});
                 if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
                     try {
-                        Device dbusDevice = DbusTools.getDevice(deviceAndNumber);
+                        Device dbusDevice = DbusTools.getDevice(objectId);
                         dbusDevice.FilesystemUnmount(new ArrayList<String>());
                         success = true;
                     } catch (DBusException | DBusExecutionException ex) {
@@ -530,7 +533,7 @@ public class Partition {
                     ProcessExecutor processExecutor = new ProcessExecutor();
                     int returnValue = processExecutor.executeProcess(
                             true, true, "udisksctl", "unmount", "-b",
-                            "/dev/" + deviceAndNumber);
+                            (isLuks ? "/dev/mapper/" : "/dev/") + deviceAndNumber);
                     if (returnValue == 0) {
                         success = true;
                     } else {
@@ -713,7 +716,7 @@ public class Partition {
         return (mountPaths != null) && (!mountPaths.isEmpty());
     }
 
-    private Partition(String device, int number, long systemSize)
+    private Partition(String device, int number, long systemSize, boolean isLuks)
             throws DBusException {
 
         LOGGER.log(Level.FINE, "device: \"{0}\", number = {1}",
@@ -721,8 +724,48 @@ public class Partition {
         this.device = device;
         this.number = number;
         this.systemSize = systemSize;
+        this.isLuks = isLuks;
         deviceAndNumber = device + number;
-
+        
+        if (isLuks && LuksUtil.isOpen("/dev/" + deviceAndNumber)) {
+            objectId = LuksUtil.deviceToObjid("/dev/" + deviceAndNumber);
+            LOGGER.log(Level.FINE, "D-BUS block device ID: {0}", objectId);
+            
+            // no real partition data available from logical devices
+            if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+                idLabel = DbusTools.getStringProperty(deviceAndNumber, "IdLabel");
+                idType = DbusTools.getStringProperty(deviceAndNumber, "IdType");
+                size = DbusTools.getLongProperty(deviceAndNumber, "Size");
+                offset = 0;
+                type = "";
+                
+            } else {
+                String objectPath = "/org/freedesktop/UDisks2/block_devices/"
+                        + objectId;
+                String blockInterface = "org.freedesktop.UDisks2.Block";
+                idLabel = DbusTools.getStringProperty(
+                        objectPath, blockInterface, "IdLabel");
+                idType = DbusTools.getStringProperty(
+                        objectPath, blockInterface, "IdType");
+                size = DbusTools.getLongProperty(
+                        objectPath, blockInterface, "Size");
+                
+                // Read some info from underlying raw partition
+                objectPath = "/org/freedesktop/UDisks2/block_devices/"
+                        + deviceAndNumber;
+                String partitionInterface = "org.freedesktop.UDisks2.Partition";
+                offset = DbusTools.getLongProperty(
+                    objectPath, partitionInterface, "Offset");
+                type = DbusTools.getStringProperty(
+                    objectPath, partitionInterface, "Type");
+                
+            }
+            isDrive = false;
+            return;
+        } 
+        
+        objectId = deviceAndNumber;
+ 
         if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
             offset = DbusTools.getLongProperty(deviceAndNumber, "PartitionOffset");
             size = DbusTools.getLongProperty(deviceAndNumber, "PartitionSize");
