@@ -80,7 +80,6 @@ public class StorageDevice implements Comparable<StorageDevice> {
     private static final ResourceBundle STRINGS
             = ResourceBundle.getBundle("ch/fhnw/util/Strings");
     private final String device;
-    private final long systemSize;
     private String vendor;
     private String model;
     private String revision;
@@ -103,12 +102,10 @@ public class StorageDevice implements Comparable<StorageDevice> {
      * creates a new StorageDevice
      *
      * @param device the unix device name, e.g. "sda"
-     * @param systemSize the size of the currently running Debian Live system
      * @throws DBusException if getting the device properties via d-bus fails
      */
-    public StorageDevice(String device, long systemSize) throws DBusException {
+    public StorageDevice(String device) throws DBusException {
         this.device = device;
-        this.systemSize = systemSize;
         boolean isOpticalDisc = false;
         String connectionInterface = null;
 
@@ -222,7 +219,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
         for (String mount : mounts) {
             String[] tokens = mount.split(" ");
             if (tokens[0].startsWith("/dev/") && tokens[1].equals(mountPoint)) {
-                return new StorageDevice(tokens[0].substring(5), systemSize);
+                return new StorageDevice(tokens[0].substring(5));
             }
         }
         return null;
@@ -388,13 +385,14 @@ public class StorageDevice implements Comparable<StorageDevice> {
     /**
      * returns if and how the storage device can be upgraded
      *
+     * @param enlargedSystemSize the enlarged system size
      * @return if and how the storage device can be upgraded
      * @throws DBusException if a dbus exception occurs
      * @throws java.io.IOException if determining the size of /home and
      * /etc/cups fails
      */
-    public synchronized UpgradeVariant getUpgradeVariant()
-            throws DBusException, IOException {
+    public synchronized UpgradeVariant getUpgradeVariant(
+            long enlargedSystemSize) throws DBusException, IOException {
 
         // lazy initialization of upgradeVariant
         if (upgradeVariant != null) {
@@ -499,17 +497,16 @@ public class StorageDevice implements Comparable<StorageDevice> {
         for (Partition partition : partitions) {
             if (partition.isSystemPartition()) {
                 long partitionSize = partition.getSize();
-                long saveSystemSize = StorageTools.getEnlargedSystemSize();
                 if (LOGGER.isLoggable(Level.INFO)) {
                     LOGGER.log(Level.INFO,
-                            "systemSize: {0}, saveSystemSize: {1}, size of {2}: {3}",
+                            "enlargedSystemSize: {1}, size of {2}: {3}",
                             new Object[]{
-                                systemSize, saveSystemSize,
+                                enlargedSystemSize,
                                 partition.getDeviceAndNumber(),
                                 partitionSize
                             });
                 }
-                remaining = partitionSize - saveSystemSize;
+                remaining = partitionSize - enlargedSystemSize;
                 LOGGER.log(Level.FINE, "remaining = {0}", remaining);
                 if (remaining >= 0) {
                     // the new system fits into the current system partition
@@ -619,8 +616,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
     private Partition parsePartition(String numberString) {
         Partition partition = null;
         try {
-            partition = Partition.getPartitionFromDevice(
-                    device, numberString, systemSize);
+            partition = Partition.getPartitionFromDevice(device, numberString);
             if (partition.isPersistencePartition()) {
                 dataPartition = partition;
             } else if (partition.isEfiPartition()) {

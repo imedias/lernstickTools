@@ -62,7 +62,7 @@ public class StorageTools {
             throws DBusException, IOException {
         if (systemStorageDevice == null) {
             Partition systemPartition = Partition.getPartitionFromMountPoint(
-                    DEBIAN_LIVE_SYSTEM_PATH, SYSTEM_SIZE);
+                    DEBIAN_LIVE_SYSTEM_PATH);
             LOGGER.log(Level.INFO, "system partition: {0}", systemPartition);
 
             if (systemPartition == null) {

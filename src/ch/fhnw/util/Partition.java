@@ -49,7 +49,6 @@ public class Partition {
     private final String type;
     private final String idLabel;
     private final String idType;
-    private final long systemSize;
     private final boolean isDrive;
     private Boolean isBootPartition;
     private Boolean isSystemPartition;
@@ -61,17 +60,15 @@ public class Partition {
      *
      * @param deviceAndNumber the device of the partition including the number
      * (e.g. "sda1")
-     * @param systemSize the on-disk-size of the operating system
      * @return a new Partition
      * @throws DBusException if getting the partition properties via dbus fails
      */
     public static Partition getPartitionFromDeviceAndNumber(
-            String deviceAndNumber, long systemSize) throws DBusException {
+            String deviceAndNumber) throws DBusException {
         LOGGER.log(Level.FINE, "deviceAndNumber: \"{0}\"", deviceAndNumber);
         Matcher matcher = DEVICE_AND_NUMBER_PATTERN.matcher(deviceAndNumber);
         if (matcher.matches()) {
-            return getPartitionFromDevice(
-                    matcher.group(1), matcher.group(2), systemSize);
+            return getPartitionFromDevice(matcher.group(1), matcher.group(2));
         }
         return null;
     }
@@ -80,13 +77,11 @@ public class Partition {
      * creates a new Partition
      *
      * @param mountPoint the mount point of the partition
-     * @param systemSize the on-disk-size of the operating system
      * @return a new Partition
      * @throws DBusException if getting the partition properties via dbus fails
      * @throws IOException if reading "/proc/mounts" fails
      */
-    public static Partition getPartitionFromMountPoint(
-            String mountPoint, long systemSize)
+    public static Partition getPartitionFromMountPoint(String mountPoint)
             throws DBusException, IOException {
         LOGGER.log(Level.FINE, "mountPoint: \"{0}\"", mountPoint);
         List<String> mounts
@@ -94,8 +89,7 @@ public class Partition {
         for (String mount : mounts) {
             String[] tokens = mount.split(" ");
             if (tokens[0].startsWith("/dev/") && tokens[1].equals(mountPoint)) {
-                return getPartitionFromDeviceAndNumber(
-                        tokens[0].substring(5), systemSize);
+                return getPartitionFromDeviceAndNumber(tokens[0].substring(5));
             }
         }
         return null;
@@ -106,12 +100,11 @@ public class Partition {
      *
      * @param device the device of the partition (e.g. "sda")
      * @param numberString the number of the partition
-     * @param systemSize the on-disk-size of the operating system
      * @return a String representation of the partition number
      * @throws DBusException if getting the partition properties via dbus fails
      */
-    public static Partition getPartitionFromDevice(String device,
-            String numberString, long systemSize) throws DBusException {
+    public static Partition getPartitionFromDevice(
+            String device, String numberString) throws DBusException {
 
         LOGGER.log(Level.FINE, "device: \"{0}\", numberString: \"{1}\"",
                 new Object[]{device, numberString});
@@ -120,8 +113,7 @@ public class Partition {
         // partiton at all
         if ((DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1)
                 || (DbusTools.isPartition(device + numberString))) {
-            return new Partition(
-                    device, Integer.parseInt(numberString), systemSize);
+            return new Partition(device, Integer.parseInt(numberString));
         } else {
             return null;
         }
@@ -226,7 +218,7 @@ public class Partition {
     public synchronized StorageDevice getStorageDevice() throws DBusException {
         if (storageDevice == null) {
             storageDevice = new StorageDevice(
-                    isDrive ? deviceAndNumber : device, systemSize);
+                    isDrive ? deviceAndNumber : device);
         }
         return storageDevice;
     }
@@ -713,14 +705,12 @@ public class Partition {
         return (mountPaths != null) && (!mountPaths.isEmpty());
     }
 
-    private Partition(String device, int number, long systemSize)
-            throws DBusException {
+    private Partition(String device, int number) throws DBusException {
 
         LOGGER.log(Level.FINE, "device: \"{0}\", number = {1}",
                 new Object[]{device, number});
         this.device = device;
         this.number = number;
-        this.systemSize = systemSize;
         deviceAndNumber = device + number;
 
         if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
