@@ -400,7 +400,13 @@ public class Partition {
                     usedSpace = userSize + cupsSize;
 
                 } else {
-                    usedSpace = size - (new File(mountPath)).getUsableSpace();
+                    // "size" is the size of the partition, the size of the
+                    // file system is a little bit smaller because of the file
+                    // system overhead.
+                    // Therefore we have to use File.getTotalSpace() instead.
+                    File mountPathFile = new File(mountPath);
+                    usedSpace = mountPathFile.getTotalSpace()
+                            - mountPathFile.getFreeSpace();
                 }
 
                 LOGGER.log(Level.INFO, "{0}: usedSpace = {1}",
