@@ -32,10 +32,10 @@ public class MountInfo {
     }
 
     /**
-     * returns <tt>true</tt>, the partition was already mounted,
+     * returns <tt>true</tt> if the partition was already mounted,
      * <tt>false</tt> otherwise
      *
-     * @return <tt>true</tt>, the partition was already mounted,
+     * @return <tt>true</tt> if the partition was already mounted,
      * <tt>false</tt> otherwise
      */
     public boolean alreadyMounted() {
