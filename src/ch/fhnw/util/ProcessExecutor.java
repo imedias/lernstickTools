@@ -43,15 +43,15 @@ public class ProcessExecutor {
      * the property for output line changes
      */
     public final static String LINE = "line";
-    private final static Logger LOGGER =
-            Logger.getLogger(ProcessExecutor.class.getName());
-    private static final String LINE_SEPARATOR =
-            System.getProperty("line.separator");
+    private final static Logger LOGGER
+            = Logger.getLogger(ProcessExecutor.class.getName());
+    private static final String LINE_SEPARATOR
+            = System.getProperty("line.separator");
     private List<String> stdOut;
     private List<String> stdErr;
     private List<String> stdAll;
-    private final PropertyChangeSupport propertyChangeSupport =
-            new PropertyChangeSupport(this);
+    private final PropertyChangeSupport propertyChangeSupport
+            = new PropertyChangeSupport(this);
     private Process process;
     private Map<String, String> environment;
 
@@ -132,12 +132,12 @@ public class ProcessExecutor {
             scriptFile = File.createTempFile("processExecutor", null);
             fileWriter = new FileWriter(scriptFile);
             fileWriter.write(script);
+            scriptFile.setExecutable(true);
         } finally {
             if (fileWriter != null) {
                 fileWriter.close();
             }
         }
-        scriptFile.setExecutable(true);
         return scriptFile;
     }
 
@@ -184,9 +184,9 @@ public class ProcessExecutor {
             stringBuilder.append("\"");
             LOGGER.fine(stringBuilder.toString());
         }
-        stdOut = new ArrayList<String>();
-        stdErr = new ArrayList<String>();
-        stdAll = new ArrayList<String>();
+        stdOut = new ArrayList<>();
+        stdErr = new ArrayList<>();
+        stdAll = new ArrayList<>();
         ProcessBuilder processBuilder = new ProcessBuilder(commandArray);
         if (environment != null) {
             processBuilder.environment().putAll(environment);
@@ -211,9 +211,7 @@ public class ProcessExecutor {
                 stderrReader.join();
             }
             return exitValue;
-        } catch (IOException e) {
-            LOGGER.log(Level.WARNING, null, e);
-        } catch (InterruptedException e) {
+        } catch (IOException | InterruptedException e) {
             LOGGER.log(Level.WARNING, null, e);
         }
         return -1;
