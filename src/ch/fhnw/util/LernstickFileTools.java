@@ -267,11 +267,8 @@ public class LernstickFileTools {
         File xinoTmpFile = File.createTempFile(".aufs.xino", "", runDir);
         xinoTmpFile.delete();
 
-        // The additional option "=ro+wh" for the readWriteMountPoint is
-        // absolutely neccessary! Otherwise the whiteouts (info about
-        // deleted files) in the readWriteMountPoint are not applied!
         String branchDefinition = "br=" + separateWithColons(
-                readWriteMountPoint + "=ro+wh", readOnlyMountPoints);
+                readWriteMountPoint, readOnlyMountPoints);
 
         File cowDir = createTempDirectory(runDir, "cow");
 
