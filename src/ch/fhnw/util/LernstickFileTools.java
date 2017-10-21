@@ -53,6 +53,7 @@ public class LernstickFileTools {
         }
         return lines;
     }
+
     /**
      * replaces a text in a file
      *
@@ -244,13 +245,16 @@ public class LernstickFileTools {
     }
 
     /**
-     * mounts an aufs file system with the given branch definition
+     * mounts an aufs file system with the given mountpoints
      *
-     * @param branchDefinition the given branch definition
-     * @return the mount point
+     * @param readWriteMountPoint the read-write mountpoint
+     * @param readOnlyMountPoints the read-only mountpoints
+     * @return the cow mount point
      * @throws IOException
      */
-    public static File mountAufs(String branchDefinition) throws IOException {
+    public static File mountAufs(String readWriteMountPoint,
+            List<String> readOnlyMountPoints) throws IOException {
+
         // cowDir is placed in /run/ because it is one of
         // the few directories that are not aufs itself.
         // Nested aufs is not (yet) supported...
@@ -263,32 +267,55 @@ public class LernstickFileTools {
         File xinoTmpFile = File.createTempFile(".aufs.xino", "", runDir);
         xinoTmpFile.delete();
 
+        // The additional option "=ro+wh" for the readWriteMountPoint is
+        // absolutely neccessary! Otherwise the whiteouts (info about
+        // deleted files) in the readWriteMountPoint are not applied!
+        String branchDefinition = "br=" + separateWithColons(
+                readWriteMountPoint + "=ro+wh", readOnlyMountPoints);
+
         File cowDir = createTempDirectory(runDir, "cow");
+
         ProcessExecutor processExecutor = new ProcessExecutor();
         processExecutor.executeProcess("mount", "-t", "aufs",
                 "-o", "xino=" + xinoTmpFile.getPath(),
                 "-o", branchDefinition, "none", cowDir.getPath());
+
         return cowDir;
     }
 
     /**
-     * creates an aufs branch definition for a read-write mount point and a list
-     * of read-only mountpoints
+     * mounts an overlay file system with the given mount points
      *
-     * @param readWriteMountPoint the read-write mount point
-     * @param readOnlyMountPoints the list of read-only partitions
-     * @return
+     * @param readWriteMountPoint the read-write mountpoint
+     * @param readOnlyMountPoints the read-only mountpoints
+     * @return the read-write directory, containing the subdirectories "upper",
+     * "work" and "cow"
+     * @throws IOException
      */
-    public static String getBranchDefinition(
-            String readWriteMountPoint, List<String> readOnlyMountPoints) {
-        StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append("br=");
-        stringBuilder.append(readWriteMountPoint);
-        for (String readOnlyMountPoint : readOnlyMountPoints) {
-            stringBuilder.append(':');
-            stringBuilder.append(readOnlyMountPoint);
-        }
-        return stringBuilder.toString();
+    public static File mountOverlay(String readWriteMountPoint,
+            List<String> readOnlyMountPoints) throws IOException {
+
+        String lowerDir = separateWithColons(
+                readWriteMountPoint, readOnlyMountPoints);
+
+        File runDir = new File("/run/");
+        File rwDir = createTempDirectory(runDir, "rw");
+        File upperDir = new File(rwDir, "upper");
+        upperDir.mkdirs();
+        File workDir = new File(rwDir, "work");
+        workDir.mkdirs();
+        File cowDir = new File(rwDir, "cow");
+        cowDir.mkdirs();
+
+        ProcessExecutor processExecutor = new ProcessExecutor();
+        processExecutor.executeProcess(true, true,
+                "mount", "-t", "overlay", "overlay",
+                "-olowerdir=" + lowerDir
+                + ",upperdir=" + upperDir
+                + ",workdir=" + workDir,
+                cowDir.getPath());
+
+        return cowDir;
     }
 
     static long getSize(Path path) throws IOException {
@@ -325,4 +352,14 @@ public class LernstickFileTools {
         }
     }
 
+    private static String separateWithColons(
+            String readWriteMountPoint, List<String> readOnlyMountPoints) {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append(readWriteMountPoint);
+        for (String readOnlyMountPoint : readOnlyMountPoints) {
+            stringBuilder.append(':');
+            stringBuilder.append(readOnlyMountPoint);
+        }
+        return stringBuilder.toString();
+    }
 }

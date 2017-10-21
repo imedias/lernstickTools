@@ -3,6 +3,9 @@ package ch.fhnw.util;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
@@ -182,8 +185,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
                                 driveObjectPath, driveInterface, "Optical");
                     }
                 }
-            } catch (SAXException | IOException |
-                    ParserConfigurationException ex) {
+            } catch (SAXException | IOException
+                    | ParserConfigurationException ex) {
                 LOGGER.log(Level.SEVERE, "", ex);
             }
         }
@@ -421,9 +424,18 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 systemMountInfo.getMountPath());
         MountInfo dataMountInfo = dataPartition.mount();
         String dataMountPoint = dataMountInfo.getMountPath();
-        String branchDefinition = LernstickFileTools.getBranchDefinition(
-                dataMountPoint, readOnlyMountPoints);
-        File cowDir = LernstickFileTools.mountAufs(branchDefinition);
+
+        File cowDir;
+        Path homePath = Paths.get(dataMountPoint, "home");
+        if (Files.exists(homePath)) {
+            // up to Debian 8
+            cowDir = LernstickFileTools.mountAufs(
+                    dataMountPoint, readOnlyMountPoints);
+        } else {
+            // starting with Debian 9
+            cowDir = LernstickFileTools.mountOverlay(
+                    dataMountPoint + "/rw", readOnlyMountPoints);
+        }
         File homeDir = new File(cowDir, "home");
         long homeSize = LernstickFileTools.getSize(homeDir.toPath());
         LOGGER.log(Level.INFO, "homeSize : {0}",
