@@ -315,7 +315,7 @@ public class LernstickFileTools {
                 + ",workdir=" + workDir,
                 cowDir.getPath());
 
-        return cowDir;
+        return rwDir;
     }
 
     static long getSize(Path path) throws IOException {
