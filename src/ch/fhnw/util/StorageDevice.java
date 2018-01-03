@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.ResourceBundle;
@@ -467,6 +468,9 @@ public class StorageDevice implements Comparable<StorageDevice> {
 
         if (oldDataSizeEnlarged > dataPartitionSize) {
             noUpgradeReason = STRINGS.getString("Data_Partition_Too_Small");
+            noUpgradeReason = MessageFormat.format(noUpgradeReason,
+                    LernstickFileTools.getDataVolumeString(
+                            oldDataSizeEnlarged, 1));
             upgradeVariant = UpgradeVariant.IMPOSSIBLE;
             return upgradeVariant;
         }
