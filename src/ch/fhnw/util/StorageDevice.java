@@ -427,16 +427,16 @@ public class StorageDevice implements Comparable<StorageDevice> {
         String dataMountPoint = dataMountInfo.getMountPath();
 
         File cowDir;
-        Path homePath = Paths.get(dataMountPoint, "home");
-        if (Files.exists(homePath)) {
-            // up to Debian 8
-            cowDir = LernstickFileTools.mountAufs(
-                    dataMountPoint, readOnlyMountPoints);
-        } else {
+        if (Files.exists(Paths.get(dataMountPoint, "rw"))
+                && Files.exists(Paths.get(dataMountPoint, "work"))) {
             // starting with Debian 9
             File rwDir = LernstickFileTools.mountOverlay(
                     dataMountPoint + "/rw", readOnlyMountPoints);
             cowDir = new File(rwDir, "cow");
+        } else {
+            // up to Debian 8
+            cowDir = LernstickFileTools.mountAufs(
+                    dataMountPoint, readOnlyMountPoints);
         }
 
         long homeSize = getDirectorySize(new File(cowDir, "home"));
