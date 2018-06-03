@@ -438,14 +438,9 @@ public class StorageDevice implements Comparable<StorageDevice> {
                     dataMountPoint + "/rw", readOnlyMountPoints);
             cowDir = new File(rwDir, "cow");
         }
-        File homeDir = new File(cowDir, "home");
-        long homeSize = LernstickFileTools.getSize(homeDir.toPath());
-        LOGGER.log(Level.INFO, "homeSize : {0}",
-                LernstickFileTools.getDataVolumeString(homeSize, 1));
-        File cupsDir = new File(cowDir, "etc/cups");
-        long cupsSize = LernstickFileTools.getSize(cupsDir.toPath());
-        LOGGER.log(Level.INFO, "cupsSize : {0}",
-                LernstickFileTools.getDataVolumeString(cupsSize, 1));
+
+        long homeSize = getDirectorySize(new File(cowDir, "home"));
+        long cupsSize = getDirectorySize(new File(cowDir, "etc/cups"));
         long oldDataSize = homeSize + cupsSize;
         LOGGER.log(Level.INFO, "oldDataSize : {0}",
                 LernstickFileTools.getDataVolumeString(oldDataSize, 1));
@@ -663,5 +658,20 @@ public class StorageDevice implements Comparable<StorageDevice> {
         } else {
             upgradeVariant = UpgradeVariant.BACKUP;
         }
+    }
+
+    private long getDirectorySize(File directory) throws IOException {
+        long directorySize = 0;
+        if (directory.exists()) {
+            directorySize = LernstickFileTools.getSize(directory.toPath());
+        } else {
+            LOGGER.log(Level.WARNING,
+                    "{0} not found in data partition", directory);
+        }
+        LOGGER.log(Level.INFO, "size of {0}: {1}", new Object[]{
+            directory,
+            LernstickFileTools.getDataVolumeString(directorySize, 1)
+        });
+        return directorySize;
     }
 }
