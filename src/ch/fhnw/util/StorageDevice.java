@@ -431,8 +431,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 && Files.exists(Paths.get(dataMountPoint, "work"))) {
             // starting with Debian 9
             File rwDir = LernstickFileTools.mountOverlay(
-                    dataMountPoint + "/rw", readOnlyMountPoints);
-            cowDir = new File(rwDir, "cow");
+                    dataMountPoint, readOnlyMountPoints, true);
+            cowDir = new File(rwDir, "merged");
         } else {
             // up to Debian 8
             cowDir = LernstickFileTools.mountAufs(

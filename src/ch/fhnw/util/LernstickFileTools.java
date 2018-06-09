@@ -283,26 +283,42 @@ public class LernstickFileTools {
     /**
      * mounts an overlay file system with the given mount points
      *
-     * @param readWriteMountPoint the read-write mountpoint
-     * @param readOnlyMountPoints the read-only mountpoints
-     * @return the read-write directory, containing the subdirectories "upper",
-     * "work" and "cow"
+     * @param upperLayerMountPoint the upper layer mountpoint
+     * @param lowerLayerMountPoints the lower layer mountpoints
+     * @param temporaryUpperDir if <tt>true</tt>, a temporary upper layer is
+     * used, so that changes in the cow directory are not passed to the media at
+     * the actual upper layer mount point, if <tt>false</tt>, the upper layer is
+     * actually used as such and modifications in the cow directory are applied
+     * to the upper layer
+     * @return the overlay directory, containing the subdirectories "rw", "work"
+     * and "merged"
      * @throws IOException
      */
-    public static File mountOverlay(String readWriteMountPoint,
-            List<String> readOnlyMountPoints) throws IOException {
+    public static File mountOverlay(String upperLayerMountPoint,
+            List<String> lowerLayerMountPoints, boolean temporaryUpperDir)
+            throws IOException {
 
-        String lowerDir = separateWithColons(
-                readWriteMountPoint, readOnlyMountPoints);
+        File overlayDir = createTempDirectory(new File("/run/"), "overlay");
+        File mergedDir = new File(overlayDir, "merged");
+        mergedDir.mkdirs();
 
-        File runDir = new File("/run/");
-        File rwDir = createTempDirectory(runDir, "rw");
-        File upperDir = new File(rwDir, "upper");
-        upperDir.mkdirs();
-        File workDir = new File(rwDir, "work");
-        workDir.mkdirs();
-        File cowDir = new File(rwDir, "cow");
-        cowDir.mkdirs();
+        String lowerDir;
+        String upperDir;
+        String workDir;
+        if (temporaryUpperDir) {
+            lowerDir = separateWithColons(
+                    upperLayerMountPoint, lowerLayerMountPoints);
+            File upperDirectory = new File(overlayDir, "rw");
+            upperDirectory.mkdirs();
+            upperDir = upperDirectory.getPath();
+            File workDirectory = new File(overlayDir, "work");
+            workDirectory.mkdirs();
+            workDir = workDirectory.getPath();
+        } else {
+            lowerDir = separateWithColons(lowerLayerMountPoints);
+            upperDir = new File(upperLayerMountPoint, "rw").getPath();
+            workDir = new File(upperLayerMountPoint, "work").getPath();
+        }
 
         ProcessExecutor processExecutor = new ProcessExecutor();
         processExecutor.executeProcess(true, true,
@@ -310,9 +326,9 @@ public class LernstickFileTools {
                 "-olowerdir=" + lowerDir
                 + ",upperdir=" + upperDir
                 + ",workdir=" + workDir,
-                cowDir.getPath());
+                mergedDir.getPath());
 
-        return rwDir;
+        return overlayDir;
     }
 
     static long getSize(Path path) throws IOException {
@@ -347,6 +363,17 @@ public class LernstickFileTools {
             LOGGER.severe(errorMessage);
             throw new IOException(errorMessage);
         }
+    }
+
+    private static String separateWithColons(List<String> readOnlyMountPoints) {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (String readOnlyMountPoint : readOnlyMountPoints) {
+            stringBuilder.append(readOnlyMountPoint);
+            stringBuilder.append(':');
+        }
+        // remove last colon
+        stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+        return stringBuilder.toString();
     }
 
     private static String separateWithColons(
