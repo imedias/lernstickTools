@@ -283,7 +283,8 @@ public class LernstickFileTools {
     /**
      * mounts an overlay file system with the given mount points
      *
-     * @param upperLayerMountPoint the upper layer mountpoint
+     * @param upperLayerMountPoint the upper layer mountpoint, containing the
+     * directories "rw" and "work"
      * @param lowerLayerMountPoints the lower layer mountpoints
      * @param temporaryUpperDir if <tt>true</tt>, a temporary upper layer is
      * used, so that changes in the cow directory are not passed to the media at
@@ -298,6 +299,8 @@ public class LernstickFileTools {
             List<String> lowerLayerMountPoints, boolean temporaryUpperDir)
             throws IOException {
 
+        String rwPath = new File(upperLayerMountPoint, "rw").getPath();
+        
         File overlayDir = createTempDirectory(new File("/run/"), "overlay");
         File mergedDir = new File(overlayDir, "merged");
         mergedDir.mkdirs();
@@ -306,8 +309,7 @@ public class LernstickFileTools {
         String upperDir;
         String workDir;
         if (temporaryUpperDir) {
-            lowerDir = separateWithColons(
-                    upperLayerMountPoint, lowerLayerMountPoints);
+            lowerDir = separateWithColons(rwPath, lowerLayerMountPoints);
             File upperDirectory = new File(overlayDir, "rw");
             upperDirectory.mkdirs();
             upperDir = upperDirectory.getPath();
@@ -316,7 +318,7 @@ public class LernstickFileTools {
             workDir = workDirectory.getPath();
         } else {
             lowerDir = separateWithColons(lowerLayerMountPoints);
-            upperDir = new File(upperLayerMountPoint, "rw").getPath();
+            upperDir = rwPath;
             workDir = new File(upperLayerMountPoint, "work").getPath();
         }
 
