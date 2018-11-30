@@ -361,7 +361,7 @@ public class Partition {
      * @return the free/usable space on this partition or "-1" if the usable
      * space is unknown
      */
-    public long getUsedSpace(boolean onlyHomeAndCups) {
+    public synchronized long getUsedSpace(boolean onlyHomeAndCups) {
         try {
             if (usedSpace == null) {
 
@@ -417,8 +417,8 @@ public class Partition {
                     umount();
                 }
             }
-        } catch (DBusExecutionException | DBusException |
-                NumberFormatException ex) {
+        } catch (DBusExecutionException | DBusException
+                | NumberFormatException ex) {
             LOGGER.log(Level.WARNING, "", ex);
             usedSpace = -1l;
         }
@@ -556,11 +556,9 @@ public class Partition {
      * partition, <code>false</code> otherwise
      * @throws DBusException if a D-BUS exception occurs
      */
-    public boolean isEfiPartition() throws DBusException {
+    public synchronized boolean isEfiPartition() throws DBusException {
         if (isBootPartition == null) {
             isBootPartition = false;
-            LOGGER.log(Level.FINEST, "checking partition {0}", deviceAndNumber);
-            LOGGER.log(Level.FINEST, "partition label: \"{0}\"", idLabel);
             if (EFI_LABEL.equals(idLabel)) {
                 isBootPartition = true;
             } else {
@@ -571,11 +569,15 @@ public class Partition {
                     }
                 }
             }
-            if (isBootPartition) {
-                LOGGER.finest("matches efi/boot partition label");
-            } else {
-                LOGGER.finest("does *NOT* match efi/boot partition label");
-            }
+            LOGGER.log(Level.FINEST,
+                    "\nchecking partition {0}\n"
+                    + "    partition label: \"{1}\"\n"
+                    + "    --> {2}",
+                    new Object[]{
+                        deviceAndNumber, idLabel, isBootPartition
+                                ? "matches efi/boot partition label"
+                                : "does *NOT* match efi/boot partition label"
+                    });
         }
         return isBootPartition;
     }
@@ -588,7 +590,7 @@ public class Partition {
      * partition, <code>false</code> otherwise
      * @throws DBusException if a dbus exception occurs
      */
-    public boolean isSystemPartition() throws DBusException {
+    public synchronized boolean isSystemPartition() throws DBusException {
         if (isSystemPartition == null) {
             isSystemPartition = false;
             LOGGER.log(Level.FINEST, "checking partition {0}", deviceAndNumber);
@@ -751,8 +753,8 @@ public class Partition {
                         = DbusTools.getInterfaceNames(objectPath);
                 tmpDrive = !interfaceNames.contains(
                         interfacePrefix + "Partition");
-            } catch (IOException | SAXException |
-                    ParserConfigurationException ex) {
+            } catch (IOException | SAXException
+                    | ParserConfigurationException ex) {
                 LOGGER.log(Level.SEVERE, "", ex);
             }
             isDrive = tmpDrive;
