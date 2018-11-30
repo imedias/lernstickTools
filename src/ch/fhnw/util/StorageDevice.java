@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -629,17 +628,23 @@ public class StorageDevice implements Comparable<StorageDevice> {
         Partition partition = null;
         try {
             partition = Partition.getPartitionFromDevice(device, numberString);
-            if (partition.isPersistencePartition()) {
+
+            if ((dataPartition == null) && partition.isPersistencePartition()) {
                 dataPartition = partition;
-            } else if (partition.isEfiPartition()) {
+
+            } else if ((efiPartition == null) && partition.isEfiPartition()) {
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 // ! put the EFI partition check before the exchange    !
                 // ! partition check because it is the more specific one !
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 efiPartition = partition;
-            } else if (partition.isExchangePartition()) {
+
+            } else if ((exchangePartition == null)
+                    && partition.isExchangePartition()) {
                 exchangePartition = partition;
-            } else if (partition.isSystemPartition()) {
+
+            } else if ((systemPartition == null)
+                    && partition.isSystemPartition()) {
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 // ! put the system partition check at the end of the list   !
                 // ! because it is the most expensive one                    !
