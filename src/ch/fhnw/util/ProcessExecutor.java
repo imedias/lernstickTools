@@ -189,22 +189,26 @@ public class ProcessExecutor {
     public int executeProcess(boolean storeStdOut, boolean storeStdErr,
             String... commandArray) {
 
+        String commandString = "";
+
         if (LOGGER.isLoggable(Level.FINE)) {
             StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.append("executing \"");
+            stringBuilder.append('\"');
             for (int i = 0; i < commandArray.length; i++) {
                 stringBuilder.append(commandArray[i]);
                 if (i != commandArray.length - 1) {
                     stringBuilder.append(" ");
                 }
             }
-            stringBuilder.append("\"");
+            stringBuilder.append('\"');
+            commandString = stringBuilder.toString();
             LOGGER.log(Level.FINE, "\n"
-                    + "    thread: {0}\n"
-                    + "    {1}", new Object[]{
+                    + "    thread: {0} {1}\n"
+                    + "    starting command: {2}",
+                    new Object[]{
                         Thread.currentThread().getName(),
-                        stringBuilder.toString()});
-            new Exception().printStackTrace();
+                        Thread.currentThread().getId(),
+                        commandString});
         }
 
         stdOut = new ArrayList<>();
@@ -226,7 +230,14 @@ public class ProcessExecutor {
             stdoutReader.start();
             stderrReader.start();
             int exitValue = process.waitFor();
-            LOGGER.log(Level.FINE, "exitValue = {0}", exitValue);
+            LOGGER.log(Level.FINE, "\n"
+                    + "    thread: {0} {1}\n"
+                    + "    finished command: {2}\n"
+                    + "    exitValue = {3}",
+                    new Object[]{
+                        Thread.currentThread().getName(),
+                        Thread.currentThread().getId(),
+                        commandString, exitValue});
             // wait for readers to finish...
             if (storeStdOut) {
                 stdoutReader.join();
