@@ -487,11 +487,12 @@ public class StorageDevice implements Comparable<StorageDevice> {
         MountInfo dataMountInfo = dataPartition.mount();
         String dataMountPoint = dataMountInfo.getMountPath();
 
+        File rwDir = null;
         File cowDir;
         if (Files.exists(Paths.get(dataMountPoint, "rw"))
                 && Files.exists(Paths.get(dataMountPoint, "work"))) {
             // starting with Debian 9
-            File rwDir = LernstickFileTools.mountOverlay(
+            rwDir = LernstickFileTools.mountOverlay(
                     dataMountPoint, readOnlyMountPoints, true);
             cowDir = new File(rwDir, "merged");
         } else {
@@ -517,6 +518,15 @@ public class StorageDevice implements Comparable<StorageDevice> {
         LernstickFileTools.umount(cowDir.getPath());
         for (String readOnlyMountPoint : readOnlyMountPoints) {
             LernstickFileTools.umount(readOnlyMountPoint);
+        }
+        // remove temporary directories
+        for (String readOnlyMountPoint : readOnlyMountPoints) {
+            File tempDir = new File(readOnlyMountPoint).getParentFile();
+            LOGGER.log(Level.INFO, "recursively deleting {0}", tempDir);
+            LernstickFileTools.recursiveDelete(tempDir, true);
+        }
+        if (rwDir != null) {
+            LernstickFileTools.recursiveDelete(rwDir, true);
         }
         if (!dataMountInfo.alreadyMounted()) {
             dataPartition.umount();
