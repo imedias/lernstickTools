@@ -106,8 +106,12 @@ public class Partition {
     public static Partition getPartitionFromDevice(
             String device, String numberString) throws DBusException {
 
-        LOGGER.log(Level.FINE, "device: \"{0}\", numberString: \"{1}\"",
-                new Object[]{device, numberString});
+        LOGGER.log(Level.FINE, "\n"
+                + "    thread: {0}\n"
+                + "    device: \"{1}\"\n"
+                + "    numberString: \"{2}\"",
+                new Object[]{Thread.currentThread().getName(),
+                    device, numberString});
 
         // for newer D-BUS versions we have to check, if this device is a
         // partiton at all
@@ -433,7 +437,9 @@ public class Partition {
      * @return the mount information
      * @throws DBusException if a dbus exception occurs
      */
-    public MountInfo mount(String... options) throws DBusException {
+    public synchronized MountInfo mount(String... options)
+            throws DBusException {
+
         try {
             String mountPath = null;
             boolean wasMounted = false;
@@ -456,7 +462,6 @@ public class Partition {
                             "/dev/" + deviceAndNumber);
                     if (returnValue == 0) {
                         String output = processExecutor.getStdOutList().get(0);
-                        LOGGER.log(Level.FINE, "output: \"{0}\"", output);
                         Pattern pattern = Pattern.compile(
                                 "Mounted /dev/\\p{Alnum}+ at (.*).");
                         Matcher matcher = pattern.matcher(output);
@@ -489,7 +494,7 @@ public class Partition {
      * <code>false</code> otherwise
      * @throws DBusException if a dbus exception occurs
      */
-    public boolean umount() throws DBusException {
+    public synchronized boolean umount() throws DBusException {
         /**
          * TODO: umount timeout problem: when there have been previous copy
          * operations, this call very often fails with the following exception:
@@ -507,9 +512,11 @@ public class Partition {
             // and act accordingly...
             List<String> mountPaths = getMountPaths();
             if ((mountPaths != null) && (!mountPaths.isEmpty())) {
-                LOGGER.log(Level.INFO,
-                        "/dev/{0} is mounted on {1}, calling umount...",
-                        new Object[]{deviceAndNumber, mountPaths.get(0)});
+                LOGGER.log(Level.INFO, "\n"
+                        + "    thread: {0}\n"
+                        + "    /dev/{1} is mounted on {2}, calling umount...",
+                        new Object[]{Thread.currentThread().getName(),
+                            deviceAndNumber, mountPaths.get(0)});
                 if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
                     try {
                         Device dbusDevice = DbusTools.getDevice(deviceAndNumber);
@@ -565,15 +572,19 @@ public class Partition {
                 for (String legacyEfiLabel : LEGACY_EFI_LABELS) {
                     if (legacyEfiLabel.equals(idLabel)) {
                         isBootPartition = true;
+                        isSystemPartition = false;
                         break;
                     }
                 }
             }
-            LOGGER.log(Level.FINEST,
-                    "\nchecking partition {0}\n"
-                    + "    partition label: \"{1}\"\n"
-                    + "    --> {2}",
+
+            LOGGER.log(Level.FINEST, "\n"
+                    + "    thread: {0}\n"
+                    + "    checking partition {1}\n"
+                    + "    partition label: \"{2}\"\n"
+                    + "    --> {3}",
                     new Object[]{
+                        Thread.currentThread().getName(),
                         deviceAndNumber, idLabel, isBootPartition
                                 ? "matches efi/boot partition label"
                                 : "does *NOT* match efi/boot partition label"
@@ -593,8 +604,13 @@ public class Partition {
     public synchronized boolean isSystemPartition() throws DBusException {
         if (isSystemPartition == null) {
             isSystemPartition = false;
-            LOGGER.log(Level.FINEST, "checking partition {0}", deviceAndNumber);
-            LOGGER.log(Level.FINEST, "partition label: \"{0}\"", idLabel);
+
+            LOGGER.log(Level.FINEST, "\n"
+                    + "    thread: {0}\n"
+                    + "    checking partition {1}\n"
+                    + "    partition label: \"{2}\"",
+                    new Object[]{Thread.currentThread().getName(),
+                        deviceAndNumber, idLabel});
 
             try {
                 // mount partition (if not already mounted)
@@ -614,7 +630,10 @@ public class Partition {
                         }
                     };
                     String[] squashFileSystems = liveDir.list(squashFsFilter);
-                    isSystemPartition = (squashFileSystems.length > 0);
+                    if (squashFileSystems.length > 0) {
+                        isSystemPartition = true;
+                        isBootPartition = false;
+                    }
                 }
 
                 // cleanup
@@ -715,8 +734,12 @@ public class Partition {
 
     private Partition(String device, int number) throws DBusException {
 
-        LOGGER.log(Level.FINE, "device: \"{0}\", number = {1}",
-                new Object[]{device, number});
+        LOGGER.log(Level.FINE, "\n"
+                + "    thread: {0}\n"
+                + "    device: \"{1}\"\n"
+                + "    number = {2}",
+                new Object[]{Thread.currentThread().getName(), device, number});
+
         this.device = device;
         this.number = number;
         deviceAndNumber = device + number;

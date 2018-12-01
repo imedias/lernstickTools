@@ -188,6 +188,7 @@ public class ProcessExecutor {
      */
     public int executeProcess(boolean storeStdOut, boolean storeStdErr,
             String... commandArray) {
+
         if (LOGGER.isLoggable(Level.FINE)) {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.append("executing \"");
@@ -198,8 +199,14 @@ public class ProcessExecutor {
                 }
             }
             stringBuilder.append("\"");
-            LOGGER.fine(stringBuilder.toString());
+            LOGGER.log(Level.FINE, "\n"
+                    + "    thread: {0}\n"
+                    + "    {1}", new Object[]{
+                        Thread.currentThread().getName(),
+                        stringBuilder.toString()});
+            new Exception().printStackTrace();
         }
+
         stdOut = new ArrayList<>();
         stdErr = new ArrayList<>();
         stdAll = new ArrayList<>();
@@ -207,6 +214,7 @@ public class ProcessExecutor {
         if (environment != null) {
             processBuilder.environment().putAll(environment);
         }
+
         try {
             process = processBuilder.start();
             StreamReader stdoutReader = new StreamReader(
@@ -230,6 +238,7 @@ public class ProcessExecutor {
         } catch (IOException | InterruptedException e) {
             LOGGER.log(Level.WARNING, "", e);
         }
+
         return -1;
     }
 
@@ -309,6 +318,7 @@ public class ProcessExecutor {
 
         public StreamReader(InputStream inputStream, String type,
                 List<String> output, List<String> all, boolean storeOutput) {
+
             super("ProcessExecutor.StreamReader");
             this.inputStream = inputStream;
             this.type = type;
@@ -319,6 +329,7 @@ public class ProcessExecutor {
 
         @Override
         public void run() {
+
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(inputStream))) {
 
