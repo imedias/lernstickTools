@@ -422,6 +422,68 @@ public class StorageDevice implements Comparable<StorageDevice> {
         MountInfo systemMountInfo = systemPartition.mount();
         List<String> readOnlyMountPoints = LernstickFileTools.mountAllSquashFS(
                 systemMountInfo.getMountPath());
+        upgradeVariant = determineUpgradeVariant(
+                readOnlyMountPoints, enlargedSystemSize);
+        if (!systemMountInfo.alreadyMounted()) {
+            systemPartition.umount();
+        }
+
+        return upgradeVariant;
+    }
+
+    /**
+     * returns the reason why this storage device can not be upgraded
+     *
+     * @return the noUpgradeReason
+     */
+    public String getNoUpgradeReason() {
+        return noUpgradeReason;
+    }
+
+    /**
+     * returns the EFI partition of this storage device
+     *
+     * @return the EFI partition of this storage device
+     */
+    public synchronized Partition getEfiPartition() {
+        getPartitions();
+        return efiPartition;
+    }
+
+    /**
+     * returns the system partition of this storage device
+     *
+     * @return the system partition of this storage device
+     */
+    public synchronized Partition getSystemPartition() {
+        getPartitions();
+        return systemPartition;
+    }
+
+    /**
+     * returns the data partition of this storage device
+     *
+     * @return the data partition of this storage device
+     */
+    public Partition getDataPartition() {
+        getPartitions();
+        return dataPartition;
+    }
+
+    /**
+     * returns the exchange partition of this storage device
+     *
+     * @return the exchange partition of this storage device
+     */
+    public Partition getExchangePartition() {
+        getPartitions();
+        return exchangePartition;
+    }
+
+    private UpgradeVariant determineUpgradeVariant(
+            List<String> readOnlyMountPoints, long enlargedSystemSize)
+            throws DBusException, IOException {
+
         MountInfo dataMountInfo = dataPartition.mount();
         String dataMountPoint = dataMountInfo.getMountPath();
 
@@ -568,55 +630,6 @@ public class StorageDevice implements Comparable<StorageDevice> {
         }
 
         return upgradeVariant;
-    }
-
-    /**
-     * returns the reason why this storage device can not be upgraded
-     *
-     * @return the noUpgradeReason
-     */
-    public String getNoUpgradeReason() {
-        return noUpgradeReason;
-    }
-
-    /**
-     * returns the EFI partition of this storage device
-     *
-     * @return the EFI partition of this storage device
-     */
-    public synchronized Partition getEfiPartition() {
-        getPartitions();
-        return efiPartition;
-    }
-
-    /**
-     * returns the system partition of this storage device
-     *
-     * @return the system partition of this storage device
-     */
-    public synchronized Partition getSystemPartition() {
-        getPartitions();
-        return systemPartition;
-    }
-
-    /**
-     * returns the data partition of this storage device
-     *
-     * @return the data partition of this storage device
-     */
-    public Partition getDataPartition() {
-        getPartitions();
-        return dataPartition;
-    }
-
-    /**
-     * returns the exchange partition of this storage device
-     *
-     * @return the exchange partition of this storage device
-     */
-    public Partition getExchangePartition() {
-        getPartitions();
-        return exchangePartition;
     }
 
     /**
