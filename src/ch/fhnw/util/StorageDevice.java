@@ -44,7 +44,11 @@ public class StorageDevice implements Comparable<StorageDevice> {
         /**
          * a secure digital memory card
          */
-        SDMemoryCard
+        SDMemoryCard,
+        /**
+         * NVM Express 
+         */
+        NVMe
     }
 
     /**
@@ -196,6 +200,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
             type = Type.OpticalDisc;
         } else if (device.startsWith("mmcblk")) {
             type = Type.SDMemoryCard;
+        } else if (device.startsWith("nvme")) {
+            type = Type.NVMe;
         } else if ((systemInternal == false)
                 && "usb".equals(connectionInterface)) {
             type = Type.USBFlashDrive;
