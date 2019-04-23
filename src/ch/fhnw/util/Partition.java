@@ -41,6 +41,8 @@ public class Partition {
             = Logger.getLogger(Partition.class.getName());
     private final static Pattern DEVICE_AND_NUMBER_PATTERN
             = Pattern.compile("(.*)(\\d+)");
+    private final static Pattern DEVICE_P_AND_NUMBER_PATTERN
+            = Pattern.compile("(.*)(p\\d+)");
     private final String device;
     private final int number;
     private final String deviceAndNumber;
@@ -58,15 +60,21 @@ public class Partition {
     /**
      * creates a new Partition
      *
-     * @param deviceAndNumber the device of the partition including the number
-     * (e.g. "sda1")
+     * @param deviceAndNumber the device of the partition including the
+     * numberString (e.g. "sda1" or "nvme0n1p1")
      * @return a new Partition
      * @throws DBusException if getting the partition properties via dbus fails
      */
     public static Partition getPartitionFromDeviceAndNumber(
             String deviceAndNumber) throws DBusException {
         LOGGER.log(Level.FINE, "deviceAndNumber: \"{0}\"", deviceAndNumber);
-        Matcher matcher = DEVICE_AND_NUMBER_PATTERN.matcher(deviceAndNumber);
+        Matcher matcher;
+        if (deviceAndNumber.startsWith("mmcblk")
+                || deviceAndNumber.startsWith("nvme")) {
+            matcher = DEVICE_P_AND_NUMBER_PATTERN.matcher(deviceAndNumber);
+        } else {
+            matcher = DEVICE_AND_NUMBER_PATTERN.matcher(deviceAndNumber);
+        }
         if (matcher.matches()) {
             return getPartitionFromDevice(matcher.group(1), matcher.group(2));
         }
@@ -98,9 +106,10 @@ public class Partition {
     /**
      * creates a new Partition
      *
-     * @param device the device of the partition (e.g. "sda")
-     * @param numberString the number of the partition
-     * @return a String representation of the partition number
+     * @param device the device of the partition (e.g. "sda" or "nvme0n1")
+     * @param numberString the numberString string of the partition (e.g. "1" or
+     * "p1")
+     * @return a String representation of the partition numberString
      * @throws DBusException if getting the partition properties via dbus fails
      */
     public static Partition getPartitionFromDevice(
@@ -117,7 +126,7 @@ public class Partition {
         // partiton at all
         if ((DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1)
                 || (DbusTools.isPartition(device + numberString))) {
-            return new Partition(device, Integer.parseInt(numberString));
+            return new Partition(device, numberString);
         } else {
             return null;
         }
@@ -237,9 +246,11 @@ public class Partition {
     }
 
     /**
-     * returns the device and number of this partition, e.g. "sda1"
+     * returns the device and numberString of this partition, e.g. "sda1" or
+     * "nvme0n1p1"
      *
-     * @return the device and number of this partition, e.g. "sda1"
+     * @return the device and numberString of this partition, e.g. "sda1" or
+     * "nvme0n1p1"
      */
     public String getDeviceAndNumber() {
         return deviceAndNumber;
@@ -732,7 +743,7 @@ public class Partition {
         return (mountPaths != null) && (!mountPaths.isEmpty());
     }
 
-    private Partition(String device, int number) throws DBusException {
+    private Partition(String device, String number) throws DBusException {
 
         LOGGER.log(Level.FINE, "\n"
                 + "    thread: {0}\n"
@@ -741,7 +752,8 @@ public class Partition {
                 new Object[]{Thread.currentThread().getName(), device, number});
 
         this.device = device;
-        this.number = number;
+        this.number = Integer.parseInt(
+                number.substring(number.startsWith("p") ? 1 : 0));
         deviceAndNumber = device + number;
 
         if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {

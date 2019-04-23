@@ -46,7 +46,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
          */
         SDMemoryCard,
         /**
-         * NVM Express 
+         * NVM Express
          */
         NVMe
     }
@@ -377,7 +377,12 @@ public class StorageDevice implements Comparable<StorageDevice> {
             partitions = new ArrayList<>();
 
             List<String> partitionStings = DbusTools.getPartitions();
-            Pattern pattern = Pattern.compile(device + "(\\d+)");
+            Pattern pattern;
+            if (device.startsWith("mmcblk") || device.startsWith("nvme")) {
+                pattern = Pattern.compile(device + "(p\\d+)");
+            } else {
+                pattern = Pattern.compile(device + "(\\d+)");
+            }
             for (String partitionString : partitionStings) {
                 Matcher matcher = pattern.matcher(partitionString);
                 if (matcher.matches()) {
@@ -651,6 +656,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
     /**
      *
      * @param numberString the partition number as a string, e.g. "1" for sda1
+     * or "p3" for nvme0n1p3
      * @return the partition
      */
     private Partition parsePartition(String numberString) {
