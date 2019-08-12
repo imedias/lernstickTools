@@ -16,7 +16,7 @@ public class StorageTools {
     private static final Logger LOGGER
             = Logger.getLogger(StorageTools.class.getName());
     private static final String DEBIAN_LIVE_SYSTEM_PATH
-            = "/lib/live/mount/medium";
+            = "/run/live/medium";
     private static final long SYSTEM_SIZE;
     private static final long SYSTEM_SIZE_ENLARGED;
     // SIZE_FACTOR is >1 so that we leave some space for updates, etc...
