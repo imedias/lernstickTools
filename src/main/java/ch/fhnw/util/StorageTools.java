@@ -68,9 +68,8 @@ public class StorageTools {
             if (systemPartition == null) {
                 // not booted from a partition but from a device itself,
                 // e.g. an isohybrid image on a usb flash drive
-                systemStorageDevice
-                        = StorageDevice.getStorageDeviceFromMountPoint(
-                                DEBIAN_LIVE_SYSTEM_PATH, SYSTEM_SIZE);
+                systemStorageDevice = StorageDevice.
+                        getStorageDeviceFromMountPoint(DEBIAN_LIVE_SYSTEM_PATH);
             } else {
                 systemStorageDevice = systemPartition.getStorageDevice();
             }

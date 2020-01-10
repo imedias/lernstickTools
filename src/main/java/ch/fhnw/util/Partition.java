@@ -743,6 +743,29 @@ public class Partition {
         return (mountPaths != null) && (!mountPaths.isEmpty());
     }
 
+    /**
+     * removes this partition from the storage device
+     *
+     * @throws IOException if an I/O exception occurs
+     * @throws DBusException if a D-Bus exception occurs
+     */
+    public void remove() throws IOException, DBusException {
+        
+        // early return
+        if (!umount()) {
+            return;
+        }
+        
+        ProcessExecutor processExecutor = new ProcessExecutor();
+        int returnValue = processExecutor.executeProcess(true, true, "parted",
+                "/dev/" + getStorageDevice().getDevice(),
+                "rm", String.valueOf(getNumber()));
+        if (returnValue != 0) {
+            throw new IOException(
+                    "removing partition " + this + " failed");
+        }
+    }
+
     private Partition(String device, String number) throws DBusException {
 
         LOGGER.log(Level.FINE, "\n"

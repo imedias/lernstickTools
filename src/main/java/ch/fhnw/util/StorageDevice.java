@@ -52,18 +52,42 @@ public class StorageDevice implements Comparable<StorageDevice> {
     }
 
     /**
-     * all known upgrade variants
+     * all known variants of upgrading the EFI partition
      */
-    public enum UpgradeVariant {
+    public enum EfiUpgradeVariant {
 
         /**
-         * The persistency partition is cleaned (excluding the users home
-         * directory and the cups configuration) and the system partition is
-         * replaced.
+         * The EFI partition is either newly created or the old content on the
+         * EFI partition is replaced with the current version.
          */
         REGULAR,
         /**
-         * The system partition must be enlarged before upgrading.
+         * The EFI partition must be enlarged before upgrading. This is done by
+         * shrinking the data partition.
+         */
+        ENLARGE_REPARTITION,
+        /**
+         * The EFI partition must be enlarged before upgrading. This is done by
+         * backing up the exchange partition. After installation the backed up
+         * data is restored to the exchange partition.
+         */
+        ENLARGE_BACKUP
+    }
+
+    /**
+     * all known variants of upgrading the system partition
+     */
+    public enum SystemUpgradeVariant {
+
+        /**
+         * The persistency partition is cleaned (excluding the users home
+         * directory and the cups configuration) and the old content on the
+         * system partition is replaced with the current version.
+         */
+        REGULAR,
+        /**
+         * The system partition must be enlarged before upgrading. This is done
+         * by shrinking the data partition.
          */
         REPARTITION,
         /**
@@ -77,7 +101,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
          */
         INSTALLATION,
         /**
-         * The storage device can not be upgraded.
+         * The system partition can not be upgraded.
          */
         IMPOSSIBLE
     }
@@ -98,7 +122,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
     private long size;
     private final Type type;
     private List<Partition> partitions;
-    private UpgradeVariant upgradeVariant;
+    private EfiUpgradeVariant efiUpgradeVariant;
+    private SystemUpgradeVariant systemUpgradeVariant;
     private String noUpgradeReason;
     private Partition exchangePartition;
     private Partition dataPartition;
@@ -214,23 +239,24 @@ public class StorageDevice implements Comparable<StorageDevice> {
      * creates a new StorageDevice
      *
      * @param mountPoint the mount point of the storage device
-     * @param systemSize the on-disk-size of the operating system
      * @return a new StorageDevice
      * @throws DBusException if getting the device properties via d-bus fails
      * @throws IOException if reading "/proc/mounts" fails
      */
     public static StorageDevice getStorageDeviceFromMountPoint(
-            String mountPoint, long systemSize)
-            throws DBusException, IOException {
+            String mountPoint) throws DBusException, IOException {
+
         LOGGER.log(Level.FINE, "mountPoint: \"{0}\"", mountPoint);
-        List<String> mounts
-                = LernstickFileTools.readFile(new File("/proc/mounts"));
+
+        List<String> mounts = LernstickFileTools.readFile(
+                new File("/proc/mounts"));
         for (String mount : mounts) {
             String[] tokens = mount.split(" ");
             if (tokens[0].startsWith("/dev/") && tokens[1].equals(mountPoint)) {
                 return new StorageDevice(tokens[0].substring(5));
             }
         }
+
         return null;
     }
 
@@ -397,7 +423,44 @@ public class StorageDevice implements Comparable<StorageDevice> {
     }
 
     /**
-     * returns if and how the storage device can be upgraded
+     * returns how the EFI partition on the storage device can be upgraded
+     *
+     * @param efiPartitionSize the desired size of the EFI partition
+     * @return how the EFI partition on the storage device can be upgraded
+     */
+    public synchronized EfiUpgradeVariant getEfiUpgradeVariant(
+            long efiPartitionSize) {
+
+        // lazy initialization of efiUpgradeVariant
+        if (efiUpgradeVariant != null) {
+            return efiUpgradeVariant;
+        }
+
+        getPartitions();
+
+        if (efiPartition == null) {
+            efiUpgradeVariant = EfiUpgradeVariant.REGULAR;
+        } else {
+            if (efiPartition.getSize() < efiPartitionSize) {
+                Partition nextPartition
+                        = partitions.get(efiPartition.getNumber());
+                if (nextPartition.hasExtendedFilesystem()) {
+                    efiUpgradeVariant = EfiUpgradeVariant.ENLARGE_REPARTITION;
+                } else {
+                    efiUpgradeVariant = EfiUpgradeVariant.ENLARGE_BACKUP;
+                }
+            } else {
+                efiUpgradeVariant = EfiUpgradeVariant.REGULAR;
+            }
+        }
+
+        LOGGER.info("efiUpgradeVariant of " + device + ": " + efiUpgradeVariant);
+        return efiUpgradeVariant;
+    }
+
+    /**
+     * returns if and how the system partition on the storage device can be
+     * upgraded
      *
      * @param enlargedSystemSize the enlarged system size
      * @return if and how the storage device can be upgraded
@@ -405,12 +468,12 @@ public class StorageDevice implements Comparable<StorageDevice> {
      * @throws java.io.IOException if determining the size of /home and
      * /etc/cups fails
      */
-    public synchronized UpgradeVariant getUpgradeVariant(
+    public synchronized SystemUpgradeVariant getSystemUpgradeVariant(
             long enlargedSystemSize) throws DBusException, IOException {
 
-        // lazy initialization of upgradeVariant
-        if (upgradeVariant != null) {
-            return upgradeVariant;
+        // lazy initialization of systemUpgradeVariant
+        if (systemUpgradeVariant != null) {
+            return systemUpgradeVariant;
         }
 
         // !!! must be called before the next check, otherwise bootPartition
@@ -419,27 +482,27 @@ public class StorageDevice implements Comparable<StorageDevice> {
 
         if (systemPartition == null) {
             noUpgradeReason = STRINGS.getString("No_System_Partition_Found");
-            upgradeVariant = UpgradeVariant.IMPOSSIBLE;
-            return upgradeVariant;
+            systemUpgradeVariant = SystemUpgradeVariant.IMPOSSIBLE;
+            return systemUpgradeVariant;
         }
 
         if (dataPartition == null) {
             noUpgradeReason = STRINGS.getString("No_Data_Partition_Found");
-            upgradeVariant = UpgradeVariant.IMPOSSIBLE;
-            return upgradeVariant;
+            systemUpgradeVariant = SystemUpgradeVariant.IMPOSSIBLE;
+            return systemUpgradeVariant;
         }
 
         // determine the size of the data to keep (/home and /etc/cups)
         MountInfo systemMountInfo = systemPartition.mount();
         List<String> readOnlyMountPoints = LernstickFileTools.mountAllSquashFS(
                 systemMountInfo.getMountPath());
-        upgradeVariant = determineUpgradeVariant(
+        systemUpgradeVariant = determineUpgradeVariant(
                 readOnlyMountPoints, enlargedSystemSize);
         if (!systemMountInfo.alreadyMounted()) {
             systemPartition.umount();
         }
 
-        return upgradeVariant;
+        return systemUpgradeVariant;
     }
 
     /**
@@ -491,7 +554,49 @@ public class StorageDevice implements Comparable<StorageDevice> {
         return exchangePartition;
     }
 
-    private UpgradeVariant determineUpgradeVariant(
+    /**
+     * creates a primary partition on this storage device
+     *
+     * @param filesystemType the filesystem type of the partition
+     * @param begin the begin of the primary partition (given in Byte)
+     * @param end the end of the primary partition (given in Byte)
+     * @throws IOException if an I/O exception occurs
+     */
+    public void createPrimaryPartition(String filesystemType,
+            long begin, long end) throws IOException {
+
+        /*
+        When starting parted interactively and typing "help mkpart" it says:
+
+        FS-TYPE is one of: zfs, btrfs, nilfs2, ext4, ext3, ext2, fat32, fat16,
+        hfsx, hfs+, hfs, jfs, swsusp, linux-swap(v1), linux-swap(v0), ntfs,
+        reiserfs, freebsd-ufs, hp-ufs, sun-ufs, xfs, apfs2, apfs1, asfs, amufs5,
+        amufs4, amufs3, amufs2, amufs1, amufs0, amufs, affs7, affs6, affs5,
+        affs4, affs3, affs2, affs1, affs0, linux-swap, linux-swap(new),
+        linux-swap(old)
+        
+        We therefore map heresome known filesystem type IDs:
+         */
+        filesystemType = filesystemType.toLowerCase();
+        switch (filesystemType) {
+            case "vfat":
+            case "exfat":
+                filesystemType = "fat32";
+                break;
+            // TODO: add more if needed
+        }
+
+        ProcessExecutor processExecutor = new ProcessExecutor(true);
+        int returnValue = processExecutor.executeProcess(true, true, "parted",
+                "/dev/" + device, "mkpart", "primary", filesystemType,
+                begin + "B", end + "B");
+        if (returnValue != 0) {
+            throw new IOException(
+                    "creating partition on " + device + " failed");
+        }
+    }
+
+    private SystemUpgradeVariant determineUpgradeVariant(
             List<String> readOnlyMountPoints, long enlargedSystemSize)
             throws DBusException, IOException {
 
@@ -548,15 +653,15 @@ public class StorageDevice implements Comparable<StorageDevice> {
             noUpgradeReason = MessageFormat.format(noUpgradeReason,
                     LernstickFileTools.getDataVolumeString(
                             oldDataSizeEnlarged, 1));
-            upgradeVariant = UpgradeVariant.IMPOSSIBLE;
-            return upgradeVariant;
+            systemUpgradeVariant = SystemUpgradeVariant.IMPOSSIBLE;
+            return systemUpgradeVariant;
         }
 
         // check partitioning schema
         if (efiPartition == null) {
             // old partitioning schema without any efi partition
             setDestructiveUpgradeVariant();
-            return upgradeVariant;
+            return systemUpgradeVariant;
 
         } else {
             switch (efiPartition.getNumber()) {
@@ -574,12 +679,12 @@ public class StorageDevice implements Comparable<StorageDevice> {
                     } else {
                         // unknown partitioning schema
                         setDestructiveUpgradeVariant();
-                        return upgradeVariant;
+                        return systemUpgradeVariant;
                     }
                 default:
                     // unknown partitioning schema
                     setDestructiveUpgradeVariant();
-                    return upgradeVariant;
+                    return systemUpgradeVariant;
             }
         }
 
@@ -604,8 +709,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 LOGGER.log(Level.FINE, "remaining = {0}", remaining);
                 if (remaining >= 0) {
                     // the new system fits into the current system partition
-                    upgradeVariant = UpgradeVariant.REGULAR;
-                    return upgradeVariant;
+                    systemUpgradeVariant = SystemUpgradeVariant.REGULAR;
+                    return systemUpgradeVariant;
                 }
 
                 // The new system is larger than the current system
@@ -632,8 +737,9 @@ public class StorageDevice implements Comparable<StorageDevice> {
                                 = previousPartition.getSize()
                                 - previousUsedSpace;
                         if (usableSpace > Math.abs(remaining)) {
-                            upgradeVariant = UpgradeVariant.REPARTITION;
-                            return upgradeVariant;
+                            systemUpgradeVariant
+                                    = SystemUpgradeVariant.REPARTITION;
+                            return systemUpgradeVariant;
                         }
                     }
                 }
@@ -647,10 +753,10 @@ public class StorageDevice implements Comparable<StorageDevice> {
 
         if (remaining < 0) {
             noUpgradeReason = STRINGS.getString("System_Partition_Too_Small");
-            upgradeVariant = UpgradeVariant.IMPOSSIBLE;
+            systemUpgradeVariant = SystemUpgradeVariant.IMPOSSIBLE;
         }
 
-        return upgradeVariant;
+        return systemUpgradeVariant;
     }
 
     /**
@@ -698,9 +804,9 @@ public class StorageDevice implements Comparable<StorageDevice> {
 
     private void setDestructiveUpgradeVariant() {
         if ((dataPartition == null) && (exchangePartition == null)) {
-            upgradeVariant = UpgradeVariant.INSTALLATION;
+            systemUpgradeVariant = SystemUpgradeVariant.INSTALLATION;
         } else {
-            upgradeVariant = UpgradeVariant.BACKUP;
+            systemUpgradeVariant = SystemUpgradeVariant.BACKUP;
         }
     }
 
