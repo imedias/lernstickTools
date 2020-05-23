@@ -442,6 +442,50 @@ public class Partition {
     }
 
     /**
+     * returns the used space of a path on this partition
+     *
+     * @param path the path to exermine
+     * @return the free/usable space of the given path on this partition or "-1"
+     * if the usable space is unknown
+     */
+    public synchronized long getUsedSpace(String path) {
+
+        long pathSpace = 0;
+
+        try {
+
+            // mount partition
+            MountInfo mountInfo = mount();
+            String mountPath = mountInfo.getMountPath();
+
+            ProcessExecutor processExecutor = new ProcessExecutor();
+            Pattern pattern = Pattern.compile("^(\\d+).*");
+            processExecutor.executeProcess(true, true,
+                    "du", "-sb", mountPath + path);
+            String stdOut = processExecutor.getStdOut();
+            LOGGER.log(Level.INFO, "stdOut = \"{0}\"", stdOut);
+            Matcher matcher = pattern.matcher(stdOut);
+            if (matcher.find()) {
+                String userSizeString = matcher.group(1);
+                pathSpace = Long.parseLong(userSizeString);
+            }
+            LOGGER.log(Level.INFO, "{0} {1}: pathSpace = {2}",
+                    new Object[]{toString(), path, pathSpace});
+
+            // cleanup
+            if (!mountInfo.alreadyMounted()) {
+                umount();
+            }
+
+        } catch (DBusExecutionException | DBusException
+                | NumberFormatException ex) {
+            LOGGER.log(Level.WARNING, "", ex);
+        }
+
+        return pathSpace;
+    }
+
+    /**
      * mounts this partition via dbus/udisks
      *
      * @param options the mount options
@@ -750,12 +794,12 @@ public class Partition {
      * @throws DBusException if a D-Bus exception occurs
      */
     public void remove() throws IOException, DBusException {
-        
+
         // early return
         if (!umount()) {
             return;
         }
-        
+
         ProcessExecutor processExecutor = new ProcessExecutor();
         int returnValue = processExecutor.executeProcess(true, true, "parted",
                 "/dev/" + getStorageDevice().getDevice(),
