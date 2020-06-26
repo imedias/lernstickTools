@@ -698,7 +698,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 long partitionSize = partition.getSize();
                 if (LOGGER.isLoggable(Level.INFO)) {
                     LOGGER.log(Level.INFO,
-                            "enlargedSystemSize: {1}, size of {2}: {3}",
+                            "enlargedSystemSize: {0}, size of {1}: {2}",
                             new Object[]{
                                 enlargedSystemSize,
                                 partition.getDeviceAndNumber(),
