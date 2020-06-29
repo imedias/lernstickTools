@@ -186,7 +186,7 @@ public class Partition {
      * @throws DBusException if a D-BUS exception occurs
      */
     public <T> T executeMounted(Action<T> action)
-            throws DBusException {
+            throws DBusException, IOException {
 
         // make sure partition is mounted before executing the action
         MountInfo mountInfo = null;
@@ -305,17 +305,26 @@ public class Partition {
      * returns a list of mount paths of this partition
      *
      * @return a list of mount paths of this partition
-     * @throws DBusException if a dbus exception occurs
+     * @throws DBusException if a D-BUS exception occurs
+     * @throws java.io.IOException if an I/O exception occurs
      */
-    public List<String> getMountPaths() throws DBusException {
+    public List<String> getMountPaths() throws DBusException, IOException {
 
         if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
+
             return DbusTools.getStringListProperty(
                     deviceAndNumber, "DeviceMountPaths");
 
         } else {
-            String objectPath = "/org/freedesktop/UDisks2/block_devices/"
-                    + deviceAndNumber;
+
+            String objectPath;
+            if (idType.equals("crypto_LUKS")) {
+                objectPath = getClearTextObjectPath();
+            } else {
+                objectPath = "/org/freedesktop/UDisks2/block_devices/"
+                        + deviceAndNumber;
+            }
+
             List<List> mountPaths = DbusTools.getListListProperty(
                     objectPath, "org.freedesktop.UDisks2.Filesystem",
                     "MountPoints");
@@ -336,9 +345,10 @@ public class Partition {
      * returns the first mount path of this partition
      *
      * @return the first mount path of this partition
-     * @throws DBusException if a dbus exception occurs
+     * @throws DBusException if a D-BUS exception occurs
+     * @throws java.io.IOException
      */
-    public String getMountPath() throws DBusException {
+    public String getMountPath() throws DBusException, IOException {
         List<String> mountPaths = getMountPaths();
         if (mountPaths.isEmpty()) {
             return null;
@@ -433,7 +443,7 @@ public class Partition {
                 }
             }
         } catch (DBusExecutionException | DBusException
-                | NumberFormatException ex) {
+                | NumberFormatException | IOException ex) {
             LOGGER.log(Level.WARNING, "", ex);
             usedSpace = -1l;
         }
@@ -478,7 +488,7 @@ public class Partition {
             }
 
         } catch (DBusExecutionException | DBusException
-                | NumberFormatException ex) {
+                | NumberFormatException | IOException ex) {
             LOGGER.log(Level.WARNING, "", ex);
         }
 
@@ -490,18 +500,24 @@ public class Partition {
      *
      * @param options the mount options
      * @return the mount information
-     * @throws DBusException if a dbus exception occurs
+     * @throws DBusException if a D-BUS exception occurs
+     * @throws java.io.IOException if an I/O exception occurs
      */
     public synchronized MountInfo mount(String... options)
-            throws DBusException {
+            throws DBusException, IOException {
 
         try {
             String mountPath = null;
             boolean wasMounted = false;
             List<String> mountPaths = getMountPaths();
             if (mountPaths.isEmpty()) {
+
+                String blockDevice = getBlockDevice();
+
                 if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
-                    Device udisksDevice = DbusTools.getDevice(deviceAndNumber);
+
+                    Device udisksDevice = DbusTools.getDevice(blockDevice);
+
                     mountPath = udisksDevice.FilesystemMount(
                             "auto", Arrays.asList(options));
                 } else {
@@ -511,14 +527,17 @@ public class Partition {
                     //
                     // So we have to call udisksctl directly.
                     // This utterly sucks but our options are limited...
+
                     ProcessExecutor processExecutor = new ProcessExecutor();
                     int returnValue = processExecutor.executeProcess(
                             true, true, "udisksctl", "mount", "-b",
-                            "/dev/" + deviceAndNumber);
+                            "/dev/" + blockDevice);
                     if (returnValue == 0) {
                         String output = processExecutor.getStdOutList().get(0);
+                        // can be something like /dev/sda1 for plaintext devices
+                        // or something like /dev/dm-0 for mapped LUKS devices
                         Pattern pattern = Pattern.compile(
-                                "Mounted /dev/\\p{Alnum}+ at (.*).");
+                                "Mounted /dev/\\p{Graph}+ at (.*).");
                         Matcher matcher = pattern.matcher(output);
                         if (matcher.matches()) {
                             mountPath = matcher.group(1);
@@ -547,9 +566,10 @@ public class Partition {
      *
      * @return <code>true</code>, if the umount operation succeeded,
      * <code>false</code> otherwise
-     * @throws DBusException if a dbus exception occurs
+     * @throws DBusException if a D-BUS exception occurs
+     * @throws java.io.IOException if an I/O exception occurs
      */
-    public synchronized boolean umount() throws DBusException {
+    public synchronized boolean umount() throws DBusException, IOException {
         /**
          * TODO: umount timeout problem: when there have been previous copy
          * operations, this call very often fails with the following exception:
@@ -559,23 +579,25 @@ public class Partition {
          * org.freedesktop.dbus.RemoteInvocationHandler.invoke(RemoteInvocationHandler.java:188)
          * at $Proxy2.FilesystemUnmount(Unknown Source)
          */
+        String blockDevice = getBlockDevice();
         boolean success = false;
         for (int i = 0; !success && (i < 60); i++) {
             // it already happend that during the timeout
             // in handleUmountException() the umount call succeeded!
             // therefore we need to test for the mount status in every round
             // and act accordingly...
+
             List<String> mountPaths = getMountPaths();
             if ((mountPaths != null) && (!mountPaths.isEmpty())) {
                 LOGGER.log(Level.INFO, "\n"
                         + "    thread: {0}\n"
                         + "    /dev/{1} is mounted on {2}, calling umount...",
                         new Object[]{Thread.currentThread().getName(),
-                            deviceAndNumber, mountPaths.get(0)});
+                            blockDevice, mountPaths.get(0)});
                 if (DbusTools.DBUS_VERSION == DbusTools.DbusVersion.V1) {
                     try {
-                        Device dbusDevice = DbusTools.getDevice(deviceAndNumber);
-                        dbusDevice.FilesystemUnmount(new ArrayList<String>());
+                        Device dbusDevice = DbusTools.getDevice(blockDevice);
+                        dbusDevice.FilesystemUnmount(new ArrayList<>());
                         success = true;
                     } catch (DBusException | DBusExecutionException ex) {
                         handleUmountException(ex);
@@ -590,7 +612,7 @@ public class Partition {
                     ProcessExecutor processExecutor = new ProcessExecutor();
                     int returnValue = processExecutor.executeProcess(
                             true, true, "udisksctl", "unmount", "-b",
-                            "/dev/" + deviceAndNumber);
+                            "/dev/" + blockDevice);
                     if (returnValue == 0) {
                         success = true;
                     } else {
@@ -598,14 +620,19 @@ public class Partition {
                     }
                 }
             } else {
-                LOGGER.log(Level.INFO,
-                        "/dev/{0} was NOT mounted", deviceAndNumber);
+                LOGGER.log(Level.INFO, "/dev/{0} was NOT mounted", blockDevice);
                 success = true;
             }
         }
-        if (!success) {
-            LOGGER.log(Level.SEVERE,
-                    "Could not umount /dev/{0}", deviceAndNumber);
+
+        if (success) {
+            if (idType.equals("crypto_LUKS")) {
+                ProcessExecutor processExecutor = new ProcessExecutor(true);
+                processExecutor.executeProcess(true, true, 
+                        "cryptsetup", "luksClose", getLUKSMappingName());
+            }
+        } else {
+            LOGGER.log(Level.SEVERE, "Could not umount /dev/{0}", blockDevice);
         }
         return success;
     }
@@ -654,7 +681,7 @@ public class Partition {
      *
      * @return <code>true</code>, if this partition is a Debian Live system
      * partition, <code>false</code> otherwise
-     * @throws DBusException if a dbus exception occurs
+     * @throws DBusException if a D-BUS exception occurs
      */
     public synchronized boolean isSystemPartition() throws DBusException {
         if (isSystemPartition == null) {
@@ -695,7 +722,7 @@ public class Partition {
                 if (!mountInfo.alreadyMounted()) {
                     umount();
                 }
-            } catch (DBusExecutionException ex) {
+            } catch (DBusExecutionException | IOException ex) {
                 throw new DBusException(ex.getMessage());
             }
         }
@@ -759,9 +786,12 @@ public class Partition {
      *
      * @return <code>true</code>, if this partition is an active persistence
      * partition, <code>false</code> otherwise
-     * @throws DBusException if a dbus exception occurs
+     * @throws DBusException if a D-BUS exception occurs
+     * @throws java.io.IOException if an I/O exception occurs
      */
-    public boolean isActivePersistencePartition() throws DBusException {
+    public boolean isActivePersistencePartition()
+            throws DBusException, IOException {
+
         if (isPersistencePartition()) {
             List<String> mountPaths = getMountPaths();
             for (String mountPath : mountPaths) {
@@ -780,9 +810,10 @@ public class Partition {
      *
      * @return <code>true</code>, if the partition is mounted,
      * <code>false</code> otherwise
-     * @throws DBusException if an dbus exception occurs
+     * @throws DBusException if an D-BUS exception occurs
+     * @throws java.io.IOException if an I/O exception occurs
      */
-    public boolean isMounted() throws DBusException {
+    public boolean isMounted() throws DBusException, IOException {
         List<String> mountPaths = getMountPaths();
         return (mountPaths != null) && (!mountPaths.isEmpty());
     }
@@ -860,6 +891,44 @@ public class Partition {
                 LOGGER.log(Level.SEVERE, "", ex);
             }
             isDrive = tmpDrive;
+        }
+    }
+
+    private String getClearTextObjectPath() throws IOException {
+        ProcessExecutor processExecutor = new ProcessExecutor(true);
+        processExecutor.executeScript(true, true, "#!/bin/sh\n"
+                + "dbus-send "
+                + "--system "
+                + "--dest=org.freedesktop.UDisks2 "
+                + "--print-reply "
+                + "/org/freedesktop/UDisks2/block_devices/" + deviceAndNumber
+                + " org.freedesktop.DBus.Properties.Get "
+                + "string:org.freedesktop.UDisks2.Encrypted "
+                + "string:CleartextDevice "
+                + "| grep block_devices "
+                + "| awk '{ print $4}' "
+                + "| tr -d '\"'");
+        String clearTextObjectPath
+                = processExecutor.getStdOut().stripTrailing();
+        LOGGER.log(Level.INFO,
+                "clearTextObjectPath: \"{0}\"", clearTextObjectPath);
+        return clearTextObjectPath;
+    }
+
+    private String getLUKSMappingName() throws IOException {
+        String script = "#!/bin/sh\n"
+                + "lsblk -nl -o NAME,TYPE /dev/" + deviceAndNumber
+                + " | " + "grep crypt$ | awk '{ print $1 }'";
+        ProcessExecutor executor = new ProcessExecutor(true);
+        executor.executeScript(true, true, script);
+        return executor.getStdOut().stripTrailing();
+    }
+
+    private String getBlockDevice() throws IOException {
+        if (idType.equals("crypto_LUKS")) {
+            return "mapper/" + getLUKSMappingName();
+        } else {
+            return deviceAndNumber;
         }
     }
 
