@@ -772,7 +772,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
 
             if ((dataPartition == null) && partition.isPersistencePartition()) {
                 dataPartition = partition;
-                LOGGER.info("dataPartition: " + dataPartition);
+                LOGGER.log(Level.INFO, "dataPartition: {0}", dataPartition);
 
             } else if ((efiPartition == null) && partition.isEfiPartition()) {
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -780,12 +780,13 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 // ! partition check because it is the more specific one !
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 efiPartition = partition;
-                LOGGER.info("efiPartition: " + efiPartition);
+                LOGGER.log(Level.INFO, "efiPartition: {0}", efiPartition);
 
             } else if ((exchangePartition == null)
                     && partition.isExchangePartition()) {
                 exchangePartition = partition;
-                LOGGER.info("exchangePartition: " + exchangePartition);
+                LOGGER.log(Level.INFO,
+                        "exchangePartition: {0}", exchangePartition);
 
             } else if ((systemPartition == null)
                     && partition.isSystemPartition()) {
@@ -794,7 +795,7 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 // ! because it is the most expensive one                    !
                 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 systemPartition = partition;
-                LOGGER.info("systemPartition: " + systemPartition);
+                LOGGER.log(Level.INFO, "systemPartition: {0}", systemPartition);
             }
         } catch (NumberFormatException | DBusException numberFormatException) {
             LOGGER.log(Level.WARNING, "", numberFormatException);
