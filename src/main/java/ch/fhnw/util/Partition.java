@@ -184,6 +184,7 @@ public class Partition {
      * @param action the action to execute
      * @return the return value of the action
      * @throws DBusException if a D-BUS exception occurs
+     * @throws java.io.IOException if an I/O exception occurs
      */
     public <T> T executeMounted(Action<T> action)
             throws DBusException, IOException {
@@ -317,16 +318,8 @@ public class Partition {
 
         } else {
 
-            String objectPath;
-            if (idType.equals("crypto_LUKS")) {
-                objectPath = getClearTextObjectPath();
-            } else {
-                objectPath = "/org/freedesktop/UDisks2/block_devices/"
-                        + deviceAndNumber;
-            }
-
             List<List> mountPaths = DbusTools.getListListProperty(
-                    objectPath, "org.freedesktop.UDisks2.Filesystem",
+                    getObjectPath(), "org.freedesktop.UDisks2.Filesystem",
                     "MountPoints");
             List<String> resultList = new ArrayList<>();
             for (List mountPath : mountPaths) {
@@ -626,9 +619,9 @@ public class Partition {
         }
 
         if (success) {
-            if (idType.equals("crypto_LUKS")) {
+            if (isLuksEncrypted()) {
                 ProcessExecutor processExecutor = new ProcessExecutor(true);
-                processExecutor.executeProcess(true, true, 
+                processExecutor.executeProcess(true, true,
                         "cryptsetup", "luksClose", getLUKSMappingName());
             }
         } else {
@@ -737,14 +730,27 @@ public class Partition {
      * partition, <code>false</code> otherwise
      */
     public boolean isPersistencePartition() {
-        if (idLabel.equals(PERSISTENCE_LABEL)) {
-            return true;
-        }
-        for (String legacyLabel : LEGACY_PERSISTENCE_LABELS) {
-            if (idLabel.equals(legacyLabel)) {
+
+        try {
+
+            String tmpIdLabel = DbusTools.getStringProperty(
+                    getObjectPath(), "org.freedesktop.UDisks2.Block",
+                    "IdLabel");
+
+            if (tmpIdLabel.equals(PERSISTENCE_LABEL)) {
                 return true;
             }
+            for (String legacyLabel : LEGACY_PERSISTENCE_LABELS) {
+                if (tmpIdLabel.equals(legacyLabel)) {
+                    return true;
+                }
+            }
+            return false;
+
+        } catch (IOException | DBusException ex) {
+            LOGGER.log(Level.SEVERE, "", ex);
         }
+
         return false;
     }
 
@@ -841,6 +847,68 @@ public class Partition {
         }
     }
 
+    public boolean isLuksEncrypted() {
+        return idType.equals("crypto_LUKS");
+    }
+
+    public boolean isSecondaryPasswordSet() {
+        return isLuksSlotUsed(1);
+    }
+
+    public boolean isLuksSlotUsed(int slot) {
+        try {
+            ProcessExecutor processExecutor = new ProcessExecutor(true);
+            String script = "cryptsetup luksDump /dev/" + deviceAndNumber
+                    + " | grep \"" + slot + ": luks2\"";
+            int returnValue = processExecutor.executeScript(true, true, script);
+            return returnValue == 0;
+        } catch (IOException ex) {
+            LOGGER.log(Level.WARNING, "", ex);
+        }
+        return false;
+    }
+
+    public boolean changeLuksPassword(int slot,
+            String oldPassword, String newPassword) throws IOException {
+
+        String script = "#!/bin/sh\n"
+                + "set -e\n"
+                + "KEYFILE=$(mktemp)\n"
+                + "trap \"rm $KEYFILE\" EXIT\n"
+                + "echo -n \"" + newPassword + "\"" + " > $KEYFILE\n"
+                + "echo \"" + oldPassword + "\" | "
+                + "cryptsetup --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "
+                + "luksChangeKey --key-slot " + slot
+                + " /dev/" + deviceAndNumber + " $KEYFILE";
+
+        ProcessExecutor processExecutor = new ProcessExecutor(false);
+        int returnValue = processExecutor.executeScript(script);
+
+        return returnValue == 0;
+    }
+
+    public boolean killSecondaryLuksSlot() throws IOException {
+        return killLuksSlot(1);
+    }
+
+    public boolean killLuksSlot(int slot) throws IOException {
+
+        // https://gitlab.com/cryptsetup/cryptsetup/-/issues/329
+        String script = "#!/bin/bash\n"
+                + "faketty () {\n"
+                + "    script -qfc \"$(printf \"%q \" \"$@\")\"\n"
+                + "}\n"
+                + "faketty cryptsetup luksKillSlot --batch-mode /dev/"
+                + deviceAndNumber + " " + slot;
+
+        ProcessExecutor processExecutor = new ProcessExecutor();
+        processExecutor.executeScript(true, true, script);
+
+        // Beause of the strange contruct needed above we don't get a real
+        // return value. Therefore we have to check again if the slot is used.
+        return !isLuksSlotUsed(slot);
+    }
+
     private Partition(String device, String number) throws DBusException {
 
         LOGGER.log(Level.FINE, "\n"
@@ -894,6 +962,14 @@ public class Partition {
         }
     }
 
+    private String getObjectPath() throws IOException {
+        if (isLuksEncrypted()) {
+            return getClearTextObjectPath();
+        } else {
+            return "/org/freedesktop/UDisks2/block_devices/" + deviceAndNumber;
+        }
+    }
+
     private String getClearTextObjectPath() throws IOException {
         ProcessExecutor processExecutor = new ProcessExecutor(true);
         processExecutor.executeScript(true, true, "#!/bin/sh\n"
@@ -925,7 +1001,7 @@ public class Partition {
     }
 
     private String getBlockDevice() throws IOException {
-        if (idType.equals("crypto_LUKS")) {
+        if (isLuksEncrypted()) {
             return "mapper/" + getLUKSMappingName();
         } else {
             return deviceAndNumber;
