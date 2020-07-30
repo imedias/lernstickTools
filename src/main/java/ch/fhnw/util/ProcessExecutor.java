@@ -124,7 +124,12 @@ public class ProcessExecutor {
     public int executeScript(boolean storeStdOut, boolean storeStdErr,
             String script, String... parameters) throws IOException {
 
-        LOGGER.log(Level.INFO, "script:\n{0}", script);
+        // If the output must not be logged then most probably the script may
+        // also contain sensitive information (passwords, etc.). Therefore we
+        // only log the script's content if output logging is also wanted.
+        if (logOutput) {
+            LOGGER.log(Level.INFO, "script:\n{0}", script);
+        }
         File scriptFile = null;
         try {
             scriptFile = createScript(script);
