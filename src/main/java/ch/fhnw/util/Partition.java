@@ -43,6 +43,8 @@ public class Partition {
             = Pattern.compile("(.*)(\\d+)");
     private final static Pattern DEVICE_P_AND_NUMBER_PATTERN
             = Pattern.compile("(.*)(p\\d+)");
+    private final static String CRYPTSETUP
+            = "cryptsetup --pbkdf pbkdf2 --pbkdf-force-iterations 1000 ";
     private final String device;
     private final int number;
     private final String deviceAndNumber;
@@ -847,6 +849,38 @@ public class Partition {
         }
     }
 
+    public boolean luksFormat(String password) throws IOException {
+        String script = "#!/bin/sh\n"
+                + "echo \"" + password + "\" | "
+                + CRYPTSETUP + "luksFormat /dev/" + deviceAndNumber + "\n";
+
+        ProcessExecutor processExecutor = new ProcessExecutor(false);
+        int returnValue = processExecutor.executeScript(script);
+
+        return returnValue == 0;
+    }
+
+    public String luksOpen(String password) throws IOException {
+
+        // TODO: any better idea for the mapping ID?
+        String mappingID = deviceAndNumber;
+
+        String script = "#!/bin/sh\n"
+                + "echo \"" + password + "\" | "
+                + "cryptsetup open --type luks /dev/" + deviceAndNumber
+                + " " + mappingID;
+
+        ProcessExecutor processExecutor = new ProcessExecutor(false);
+        int returnValue = processExecutor.executeScript(script);
+
+        if (returnValue != 0) {
+            throw new IOException(
+                    "Could not open LUKS partition /dev/" + deviceAndNumber);
+        }
+
+        return "/dev/mapper/" + mappingID;
+    }
+
     public boolean isLuksEncrypted() {
         return idType.equals("crypto_LUKS");
     }
@@ -868,6 +902,30 @@ public class Partition {
         return false;
     }
 
+    public boolean addSecondaryLuksPassword(
+            String existingPassword, String newPassword) throws IOException {
+        return addLuksPassword(existingPassword, 1, newPassword);
+    }
+
+    public boolean addLuksPassword(
+            String existingPassword, int slot, String newPassword)
+            throws IOException {
+
+        String script = "#!/bin/sh\n"
+                + "set -e\n"
+                + "KEYFILE=$(mktemp)\n"
+                + "trap \"rm $KEYFILE\" EXIT\n"
+                + "echo -n \"" + newPassword + "\"" + " > $KEYFILE\n"
+                + "echo \"" + existingPassword + "\" | " + CRYPTSETUP
+                + "luksAddKey --key-slot 1 /dev/" + deviceAndNumber
+                + " $KEYFILE\n";
+
+        ProcessExecutor processExecutor = new ProcessExecutor(false);
+        int returnValue = processExecutor.executeScript(script);
+
+        return returnValue == 0;
+    }
+
     public boolean changeLuksPassword(int slot,
             String oldPassword, String newPassword) throws IOException {
 
@@ -876,8 +934,7 @@ public class Partition {
                 + "KEYFILE=$(mktemp)\n"
                 + "trap \"rm $KEYFILE\" EXIT\n"
                 + "echo -n \"" + newPassword + "\"" + " > $KEYFILE\n"
-                + "echo \"" + oldPassword + "\" | "
-                + "cryptsetup --pbkdf pbkdf2 --pbkdf-force-iterations 1000 "
+                + "echo \"" + oldPassword + "\" | " + CRYPTSETUP
                 + "luksChangeKey --key-slot " + slot
                 + " /dev/" + deviceAndNumber + " $KEYFILE";
 
