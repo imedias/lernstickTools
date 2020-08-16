@@ -425,11 +425,11 @@ public class StorageDevice implements Comparable<StorageDevice> {
     /**
      * returns how the EFI partition on the storage device can be upgraded
      *
-     * @param efiPartitionSize the desired size of the EFI partition
+     * @param neededEfiPartitionSize the needed size of the EFI partition
      * @return how the EFI partition on the storage device can be upgraded
      */
     public synchronized EfiUpgradeVariant getEfiUpgradeVariant(
-            long efiPartitionSize) {
+            long neededEfiPartitionSize) {
 
         // lazy initialization of efiUpgradeVariant
         if (efiUpgradeVariant != null) {
@@ -441,9 +441,16 @@ public class StorageDevice implements Comparable<StorageDevice> {
         if (efiPartition == null) {
             efiUpgradeVariant = EfiUpgradeVariant.REGULAR;
         } else {
-            if (efiPartition.getSize() < efiPartitionSize) {
-                Partition nextPartition
-                        = partitions.get(efiPartition.getNumber());
+            long missing = neededEfiPartitionSize - efiPartition.getSize();
+            // Because of parted "optimal" alignments it might happen, that the
+            // EFI partition created in the DLCopy installer is slightly smaller
+            // than the exact size given to parted via command line.
+            // Therefore we are a little bit more tolerant here...
+            if (missing > 2097152 /* 2097152 = 2 MiB*/) {
+                Partition nextPartition = partitions.get(
+                        efiPartition.getNumber());
+                // enlarging is (for now) only possible when the next partition
+                // is ext[234]
                 if (nextPartition.hasExtendedFilesystem()) {
                     efiUpgradeVariant = EfiUpgradeVariant.ENLARGE_REPARTITION;
                 } else {
@@ -454,7 +461,9 @@ public class StorageDevice implements Comparable<StorageDevice> {
             }
         }
 
-        LOGGER.info("efiUpgradeVariant of " + device + ": " + efiUpgradeVariant);
+        LOGGER.log(Level.INFO, "efiUpgradeVariant of {0}: {1}",
+                new Object[]{device, efiUpgradeVariant});
+
         return efiUpgradeVariant;
     }
 
