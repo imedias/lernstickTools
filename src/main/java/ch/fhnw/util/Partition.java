@@ -389,6 +389,13 @@ public class Partition {
                 MountInfo mountInfo = mount();
                 String mountPath = mountInfo.getMountPath();
 
+                if (mountPath == null) {
+                    LOGGER.log(Level.WARNING, "Can''t determine used space of "
+                            + "/dev/{0} because it couldn''t be mounted",
+                            deviceAndNumber);
+                    return -1l;
+                }
+
                 if (onlyHomeAndCups) {
                     // in case of an upgrade we would only keep /home/user and
                     // /etc/cups
