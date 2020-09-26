@@ -806,8 +806,8 @@ public class StorageDevice implements Comparable<StorageDevice> {
                 systemPartition = partition;
                 LOGGER.log(Level.INFO, "systemPartition: {0}", systemPartition);
             }
-        } catch (NumberFormatException | DBusException numberFormatException) {
-            LOGGER.log(Level.WARNING, "", numberFormatException);
+        } catch (NumberFormatException | DBusException exception) {
+            LOGGER.log(Level.WARNING, "", exception);
         }
         return partition;
     }
