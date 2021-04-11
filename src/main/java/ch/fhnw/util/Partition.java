@@ -536,10 +536,19 @@ public class Partition {
                             "/dev/" + blockDevice);
                     if (returnValue == 0) {
                         String output = processExecutor.getStdOutList().get(0);
-                        // can be something like /dev/sda1 for plaintext devices
-                        // or something like /dev/dm-0 for mapped LUKS devices
+                        // The device can be something like /dev/sda1 for
+                        // plaintext devices or something like /dev/dm-0 for
+                        // mapped LUKS devices.
+                        // Unfortunately, the output is not very stable, in
+                        // Debian 10 it reads:
+                        // Mounted /dev/sda2 at /media/root/persistence.
+                        // In Debian 11 the dot at the end is missing:
+                        // Mounted /dev/sda2 at /media/root/persistence
+                        if (output.endsWith(".")) {
+                            output = output.substring(0, output.length() - 1);
+                        }
                         Pattern pattern = Pattern.compile(
-                                "Mounted /dev/\\p{Graph}+ at (.*).");
+                                "Mounted /dev/\\p{Graph}+ at (.*)");
                         Matcher matcher = pattern.matcher(output);
                         if (matcher.matches()) {
                             mountPath = matcher.group(1);
