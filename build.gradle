@@ -6,7 +6,7 @@ dependencies {
 	def DBUS_JAR='/usr/share/java/dbus.jar'
 	assert file("$DBUS_JAR").exists() : 
 		"The library $DBUS_JAR is missing!\nPlease install the Debian package \"libdbus-java\"!\n"
-	compile files("$DBUS_JAR")
+	implementation files("$DBUS_JAR")
 }
 
 task sortStrings(type:Exec) {
